@@ -58,7 +58,7 @@ function Results() {
 
     return (
       <>
-        <p>Hey! This is the results stage.</p>
+        <p>Hoiiii! This is the results stage.</p>
       </>
     )
   }
