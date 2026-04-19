@@ -1,5 +1,4 @@
 import { useState,useEffect } from "react"
-import Anthropic from "@anthropic-ai/sdk";
 
 // interface ResultsProps {
 //   baseline: {
@@ -26,8 +25,6 @@ function Results() {
 
   // const [loading, setLoading] = useState<boolean>(true)
   // const [error, setError] = useState<string | null>(null)
-
-  const claudeClientID = import.meta.env.CLAUDE_API_KEY
 
   const [claudeRes, setClaudeRes] = useState<string>("")
 
