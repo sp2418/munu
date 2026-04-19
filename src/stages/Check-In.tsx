@@ -59,42 +59,44 @@ function CheckIn({setView}: CheckInProps) {
         }
     }
 
-    const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
-    const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
+    // const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
+    // const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
 
-    const getSpotifyTokenRequest = async () => {
-        const response = await fetch("/accounts/api/token", {
-            method: "POST",
-            headers: {
-                'Authorization': 'Basic ' + (btoa(spotifyClientId + ':' + spotifyClientSecret)),
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: new URLSearchParams({grant_type: 'client_credentials'})     
-        })
-        const data = await response.json()
-        return data.access_token
-    }
+    // const getSpotifyTokenRequest = async () => {
+    //     const response = await fetch("/accounts/api/token", {
+    //         method: "POST",
+    //         headers: {
+    //             'Authorization': 'Basic ' + (btoa(spotifyClientId + ':' + spotifyClientSecret)),
+    //             'Content-Type': 'application/x-www-form-urlencoded'
+    //         },
+    //         body: new URLSearchParams({grant_type: 'client_credentials'})     
+    //     })
+    //     const data = await response.json()
+    //     return data.access_token
+    // }
 
-    const [spotifyToken, setSpotifyToken] = useState<string>("")
+    // const [spotifyToken, setSpotifyToken] = useState<string>("")
 
-    useEffect(() => {
-        const fetchToken = async () => {
-            const tokenResult = await getSpotifyTokenRequest()
-            setSpotifyToken(tokenResult)
-        }
-        fetchToken()
-    }, [])
+    // useEffect(() => {
+    //     const fetchToken = async () => {
+    //         const tokenResult = await getSpotifyTokenRequest()
+    //         setSpotifyToken(tokenResult)
+    //     }
+    //     fetchToken()
+    // }, [])
 
     const searchTracks = async (searchTermTrack: string) => {
         // console.log(`/spotify/v1/search?q=${searchTermTrack}&type=track&limit=10`)
         // console.log("sup")
-        const response = await fetch(`/spotify/v1/search?q=${searchTermTrack}&type=track`, {
-            method: "GET",
-            headers: {
-                'Authorization': 'Bearer ' + spotifyToken
-            }
-        })
-        // console.log(response.status)
+        // const response = await fetch(`/spotify/v1/search?q=${searchTermTrack}&type=track`, {
+        //     method: "GET",
+        //     headers: {
+        //         'Authorization': 'Bearer ' + spotifyToken
+        //     }
+        // })
+        // // console.log(response.status)
+        // const data = await response.json()
+        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track`)
         const data = await response.json()
         return data
     }
@@ -128,7 +130,6 @@ function CheckIn({setView}: CheckInProps) {
 
     useEffect(() => {
         // let isActive = true
-        if(!spotifyToken) return
         if(!searchTermTrack.trim()) {
             setSpotifyTracks([])
             return
@@ -163,7 +164,7 @@ function CheckIn({setView}: CheckInProps) {
         // return () => {
         //     isActive = false
         // }
-    }, [searchTermTrack, spotifyToken])
+    }, [searchTermTrack])
 
     const [listOfTracks, setListOfTracks] = useState<[string, string[]][]>([])
 
