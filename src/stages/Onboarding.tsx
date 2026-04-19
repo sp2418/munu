@@ -103,7 +103,7 @@ function Onboarding({setView}: OnboardingProps) {
         // })
         // // console.log(response.status)
         // const data = await response.json()
-        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=artist`)
+        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track`)
         const data = await response.json()
         return data
     }
