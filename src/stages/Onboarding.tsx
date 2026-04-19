@@ -18,41 +18,35 @@ interface OnboardingProps {
 }
 
 function Onboarding({setView}: OnboardingProps) {
-    const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
-    const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
+    // const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
+    // const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
 
-    const getSpotifyTokenRequest = async () => {
-        const response = await fetch("/accounts/api/token", {
-            method: "POST",
-            headers: {
-                'Authorization': 'Basic ' + (btoa(spotifyClientId + ':' + spotifyClientSecret)),
-                'Content-Type': 'application/x-www-form-urlencoded'
-            },
-            body: new URLSearchParams({grant_type: 'client_credentials'})     
-        })
-        const data = await response.json()
-        return data.access_token
-    }
+    // const getSpotifyTokenRequest = async () => {
+    //     const response = await fetch("/accounts/api/token", {
+    //         method: "POST",
+    //         headers: {
+    //             'Authorization': 'Basic ' + (btoa(spotifyClientId + ':' + spotifyClientSecret)),
+    //             'Content-Type': 'application/x-www-form-urlencoded'
+    //         },
+    //         body: new URLSearchParams({grant_type: 'client_credentials'})     
+    //     })
+    //     const data = await response.json()
+    //     return data.access_token
+    // }
 
-    const [spotifyToken, setSpotifyToken] = useState<string>("")
+    // const [spotifyToken, setSpotifyToken] = useState<string>("")
 
-    useEffect(() => {
-        const fetchToken = async () => {
-            const tokenResult = await getSpotifyTokenRequest()
-            setSpotifyToken(tokenResult)
-        }
-        fetchToken()
-    }, [])
+    // useEffect(() => {
+    //     const fetchToken = async () => {
+    //         const tokenResult = await getSpotifyTokenRequest()
+    //         setSpotifyToken(tokenResult)
+    //     }
+    //     fetchToken()
+    // }, [])
 
     const searchArtists = async (searchTermArtist: string) => {
         // console.log(`/spotify/v1/search?q=${searchTermArtist}&type=artist`)
-        const response = await fetch(`/spotify/v1/search?q=${searchTermArtist}&type=artist`, {
-            method: "GET",
-            headers: {
-                'Authorization': 'Bearer ' + spotifyToken
-            }
-        })
-        // console.log(response.status)
+        const response = await fetch(`/api/spotify-search?q=${searchTermArtist}&type=artist`)
         const data = await response.json()
         return data
     }
@@ -73,7 +67,7 @@ function Onboarding({setView}: OnboardingProps) {
 
     useEffect(() => {
         let isActive = true
-        if(!spotifyToken) return
+        // if(!spotifyToken) return
         if(!searchTermArtist.trim()) {
             setSpotifyArtists([])
             return
@@ -93,7 +87,7 @@ function Onboarding({setView}: OnboardingProps) {
         return () => {
             isActive = false
         }
-    }, [searchTermArtist, spotifyToken])
+    }, [searchTermArtist])
 
     // console.log(spotifyArtists)
 
@@ -101,13 +95,15 @@ function Onboarding({setView}: OnboardingProps) {
     const searchTracks = async (searchTermTrack: string) => {
         // console.log(`/spotify/v1/search?q=${searchTermTrack}&type=track&limit=10`)
         // console.log("sup")
-        const response = await fetch(`/spotify/v1/search?q=${searchTermTrack}&type=track`, {
-            method: "GET",
-            headers: {
-                'Authorization': 'Bearer ' + spotifyToken
-            }
-        })
-        // console.log(response.status)
+        // const response = await fetch(`/spotify/v1/search?q=${searchTermTrack}&type=track`, {
+        //     method: "GET",
+        //     headers: {
+        //         'Authorization': 'Bearer ' + spotifyToken
+        //     }
+        // })
+        // // console.log(response.status)
+        // const data = await response.json()
+        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=artist`)
         const data = await response.json()
         return data
     }
@@ -141,7 +137,7 @@ function Onboarding({setView}: OnboardingProps) {
 
     useEffect(() => {
         // let isActive = true
-        if(!spotifyToken) return
+        // if(!spotifyToken) return
         if(!searchTermTrack.trim()) {
             setSpotifyTracks([])
             return
@@ -176,7 +172,7 @@ function Onboarding({setView}: OnboardingProps) {
         // return () => {
         //     isActive = false
         // }
-    }, [searchTermTrack, spotifyToken])
+    }, [searchTermTrack])
 
 
     const genres = [
