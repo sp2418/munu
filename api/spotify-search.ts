@@ -23,7 +23,7 @@ export default async function handleSpotifySearch(req: VercelRequest, res: Verce
     const spotifyToken = token_data.access_token
 
 
-    const searchResponse = await fetch(`/spotify/v1/search?q=${q}&type=${type}`, {
+    const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=${type}&limit=10`, {
         method: "GET",
         headers: {
             'Authorization': 'Bearer ' + spotifyToken
