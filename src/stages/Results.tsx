@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useState,useEffect } from "react"
 import Anthropic from "@anthropic-ai/sdk";
 
 // interface ResultsProps {
@@ -29,23 +29,18 @@ function Results() {
 
   const claudeClientID = import.meta.env.CLAUDE_API_KEY
 
+  const [claudeRes, setClaudeRes] = useState<string>("")
+
 
 
   useEffect(() => {
 
     const fetchClaudeResponse = async () => {
-      const client = new Anthropic({
-        apiKey: claudeClientID // This is the default and can be omitted
-      });
-      const msg = await client.messages.create({
-        model: "claude-opus-4-7",
-        max_tokens: 1024,
-        messages: [{
-          role: "user",
-          content: "Hello, Claude"
-        }],
-      });
-      console.log(msg);
+      const response = await fetch(`/api/claude`)
+      const data = await response.json()
+      setClaudeRes(data.response)
+      // const data = await response.json()
+      // return data
     }
 
     fetchClaudeResponse();
@@ -59,6 +54,7 @@ function Results() {
     return (
       <>
         <p>Hoiiii! This is the results stage.</p>
+        <p>{claudeRes}</p>
       </>
     )
   }

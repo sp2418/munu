@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import handleSpotifyTokenRequest from './spotify-token'
 
 
 export default async function handleSpotifySearch(req: VercelRequest, res: VercelResponse) {
