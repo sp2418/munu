@@ -6,6 +6,55 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
     if (!claudeAPIKey) {
         return res.status(500).json({ error: 'Missing Anthropic API key' })
     }
+
+    const prompt = `
+    You are a music therapist and emotional wellness guide. 
+
+    You are experienced with applying the iso-principle. You meet people where they are emotionally based on the current music they’re listening to. Then, you gradually help them shift to a desired state that helps them emotionally process what they are going through by suggesting songs that gradually shift in energy and tempo.
+
+
+    Here is some information about the user’s music taste:
+
+    Favorite Genres: Hip Hop, R&B, Pop, Afrobeats
+
+    Favorite Artists: KAYTRANADA, Megan Thee Stallion, PinkPantheress, Doja Cat, Doechii, Jhene Aiko, Ariana Grande, Bad Bunny, Tamae, Sabrina Carpenter
+
+    Favorite Tracks: Hmmm by Chris Brown and Davido, Jealous Type by Doja Cat, Sugar Talking by Sabrina Carpenter, Wait on Us by Tamae and Bastian Beli, TARGET JOINT by KAYTRANADA
+
+    Life Contexts when they listen to music: Working out, socializing, getting ready, driving, processing emotions
+
+    What they think about their relationship with music: Music has been a huge part of my life. I’ve listened to it to help me process what I’ve been through. Sometimes I listen to it just for fun to, especially since I am a dancer. It just makes life a lot more vibrant for me, and I get really excited when I come across new music that I can vibe with. 
+
+
+    Here is information about how the user is actually currently feeling:
+
+    What they are feeling recently: I’ve been pretty anxious or restless or even just frustrated over the job search recently. I feel like it’s consuming most of my life, and I don’t know how to enjoy life when the goal of finding a job is looming over my head. Getting a job in tech has been surprisingly emotionally taxing. I’m doing my best, but I’ve been at this for months. I really hope I get a job soon. 
+
+    Their current emotions: Anxious, Overwhelmed, Stressed, Hopeful, Restless, Drained
+
+    Songs they’re listening to recently: Girl Like Me + Kaytranada by PinkPantheress and KAYTRANADA, What’s the Use? By Mac Miller, Dang! (feat. Anderson.Paak) by Mac Miller and Anderson.Paak, borderline by Ariana Grande and Missy Elliott
+
+
+    Specific Task Instructions:
+
+    1. Suggest how the current music they’re listening to may be affecting their emotional state. Remember to be warm and supportive. Use phrases like “may be affecting” instead of “is causing”.
+    2. Then, suggest 6 songs that can help them gradually shift to a desired state that helps them emotionally process what they are going through with the use of the iso-principle.  
+    3. Offer explanations on how those 6 suggested songs can help them process. 
+    4. Lastly, suggest 6 other songs that can represent them once they’re fully in their desired state after emotionally processing what they’re going through. The desired state represents a future state where the user has completed emotionally processing what they are going through and hopefully feels more positively about their circumstances in general
+
+    Return a JSON with these specific fields:
+    - insight: contains output for Step 1
+    - gradualShiftSongs: contains output for Step 2
+        - Example of format: "gradualShiftSongs": [{"title": "...", "artist": "..."}]
+    - gradualShiftExplanation: contains output for Step 3
+        - Example of format: "gradualShiftExplanation": [{"title": "...", "artist": "...", "explanation": "..."}]
+    - desiredStateSongs: contains output for Step 4
+        - Example of format: “desiredStateSongs": [{"title": "...", "artist": "..."}]
+
+    Return ONLY a JSON object. No additional text before or after. `
+
+
+
     const client = new Anthropic({
         apiKey: claudeAPIKey // This is the default and can be omitted
       });
@@ -14,7 +63,7 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         max_tokens: 1024,
         messages: [{
           role: "user",
-          content: "Hello, Claude"
+          content: prompt
         }],
       });
       const response = msg.content[0]
