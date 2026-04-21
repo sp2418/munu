@@ -47,6 +47,17 @@ function Results() {
 
   }, [])
 
+  const handleSongPreview = async (song: any) => {
+    const response = await fetch(
+      `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
+    )
+    const data = await response.json()
+    const previewUrl = data.results[0]?.previewUrl
+    return (
+      <audio controls src={previewUrl} />
+    )
+  }
+
 
   console.log("Baseline:", baseline)
   console.log("Emotional Context", currEmotContext)
@@ -55,6 +66,9 @@ function Results() {
       <>
         <p>Hoiiii! This is the results stage.</p>
         <p>{claudeRes.insight}</p>
+        {claudeRes.desiredStateSongs.map((song: any) => {
+          handleSongPreview(song)
+        })}
       </>
     )
   }
