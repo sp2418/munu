@@ -26,7 +26,7 @@ function Results() {
   // const [loading, setLoading] = useState<boolean>(true)
   // const [error, setError] = useState<string | null>(null)
 
-  const [claudeRes, setClaudeRes] = useState<any>("")
+  const [claudeRes, setClaudeRes] = useState<any>(null)
   const [previews, setPreviews] = useState<any>([])
 
 
@@ -80,9 +80,9 @@ function Results() {
           <div>
             <p>{claudeRes.insight}</p>
             {
-              previews.map((previewUrl: any) => {
+              previews.map((previewUrl: any) => (
                 <audio controls src={previewUrl} />
-              })
+              ))
             }
           </div>)
         }
