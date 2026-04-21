@@ -35,7 +35,9 @@ function Results() {
     const fetchClaudeResponse = async () => {
       const response = await fetch(`/api/claude`)
       const data = await response.json()
-      setClaudeRes(data.response)
+      const cleaned = data.response.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(cleaned)
+      setClaudeRes(parsed)
       console.log("claude response", data.response)
       // const data = await response.json()
       // return data
