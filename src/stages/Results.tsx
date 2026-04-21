@@ -53,7 +53,7 @@ function Results() {
     )
     const data = await response.json()
     const previewUrl = data.results[0]?.previewUrl
-    console.log(previewUrl)
+    console.log("hi",previewUrl)
     return (
       <audio controls src={previewUrl} />
     )
@@ -70,9 +70,10 @@ function Results() {
           <div>
             <p>{claudeRes.insight}</p>
             {
-            claudeRes.desiredStateSongs.map((song: any) => {
-              handleSongPreview(song)
-            })}
+              claudeRes.desiredStateSongs.map((song: any) => {
+                handleSongPreview(song)
+              })
+            }
           </div>)
         }
       </>
