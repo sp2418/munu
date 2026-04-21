@@ -27,6 +27,7 @@ function Results() {
   // const [error, setError] = useState<string | null>(null)
 
   const [claudeRes, setClaudeRes] = useState<any>("")
+  const [previews, setPreviews] = useState<any>([])
 
 
 
@@ -45,19 +46,38 @@ function Results() {
 
     fetchClaudeResponse();
 
+
+    const handleSongPreview = async () => {
+      if (claudeRes) {
+        claudeRes.desiredStateSongs.map(async (song: any) => {
+          const response = await fetch(
+            `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
+          )
+          const data = await response.json()
+          const previewUrl = data.results[0]?.previewUrl
+          console.log("hi",previewUrl)
+          setPreviews([...previews, previewUrl])
+        })
+      }
+    }
+
+    handleSongPreview();
+
   }, [])
 
-  const handleSongPreview = async (song: any) => {
-    const response = await fetch(
-      `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
-    )
-    const data = await response.json()
-    const previewUrl = data.results[0]?.previewUrl
-    console.log("hi",previewUrl)
-    return (
-      <audio controls src={previewUrl} />
-    )
-  }
+  // const handleSongPreview = async () => {
+  //   if (claudeRes) {
+  //     claudeRes.desiredStateSongs.map(async (song: any) => {
+  //       const response = await fetch(
+  //         `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
+  //       )
+  //       const data = await response.json()
+  //       const previewUrl = data.results[0]?.previewUrl
+  //       console.log("hi",previewUrl)
+  //       setPreviews([...previews, previewUrl])
+  //     })
+  //   }
+  // }
 
 
   console.log("Baseline:", baseline)
@@ -70,8 +90,8 @@ function Results() {
           <div>
             <p>{claudeRes.insight}</p>
             {
-              claudeRes.desiredStateSongs.map((song: any) => {
-                handleSongPreview(song)
+              previews.map((previewUrl: any) => {
+                <audio controls src={previewUrl} />
               })
             }
           </div>)
