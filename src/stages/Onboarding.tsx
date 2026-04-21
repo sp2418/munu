@@ -149,7 +149,7 @@ function Onboarding({setView}: OnboardingProps) {
                     index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
             )
             const tracks: [string, string[]][] = []
-            // console.log("yo", uniqueTracks)
+            console.log("yo", uniqueTracks)
             uniqueTracks.forEach((track : SpotifyTrack) => {
                 const trackName = track.name
                 // console.log("name", trackName)
