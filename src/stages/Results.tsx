@@ -57,7 +57,7 @@ function Results() {
   const handleSongPreview = async () => {
     if (claudeRes) {
       const urls: string[] = []
-      for (const song of claudeRes.desiredStateSongs){
+      for (const song of claudeRes.gradualShiftSongs){
         const response = await fetch(
           `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
         )
