@@ -65,10 +65,15 @@ function Results() {
     return (
       <>
         <p>Hoiiii! This is the results stage.</p>
-        <p>{claudeRes.insight}</p>
-        {claudeRes.desiredStateSongs.map((song: any) => {
-          handleSongPreview(song)
-        })}
+        {claudeRes && (
+          <div>
+            <p>{claudeRes.insight}</p>
+            {
+            claudeRes.desiredStateSongs.map((song: any) => {
+              handleSongPreview(song)
+            })}
+          </div>)
+        }
       </>
     )
   }
