@@ -52,19 +52,20 @@ function Results() {
     if (!claudeRes) return
     handleSongPreview()
 
-  }, claudeRes)
+  }, [claudeRes])
 
   const handleSongPreview = async () => {
     if (claudeRes) {
-      claudeRes.desiredStateSongs.map(async (song: any) => {
+      const urls: string[] = []
+      for (const song of claudeRes.desiredStateSongs){
         const response = await fetch(
           `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
         )
         const data = await response.json()
         const previewUrl = data.results[0]?.previewUrl
-        console.log("hi",previewUrl)
-        setPreviews([...previews, previewUrl])
-      })
+        urls.push(previewUrl)
+      }
+      setPreviews(urls)
     }
   }
 
