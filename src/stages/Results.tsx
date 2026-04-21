@@ -26,7 +26,7 @@ function Results() {
   // const [loading, setLoading] = useState<boolean>(true)
   // const [error, setError] = useState<string | null>(null)
 
-  const [claudeRes, setClaudeRes] = useState<string>("")
+  const [claudeRes, setClaudeRes] = useState<any>("")
 
 
 
@@ -38,7 +38,7 @@ function Results() {
       const cleaned = data.response.replace(/```json|```/g, '').trim()
       const parsed = JSON.parse(cleaned)
       setClaudeRes(parsed)
-      console.log("claude response", data.response)
+      console.log("claude response", parsed)
       // const data = await response.json()
       // return data
     }
@@ -54,7 +54,7 @@ function Results() {
     return (
       <>
         <p>Hoiiii! This is the results stage.</p>
-        <p>{claudeRes}</p>
+        <p>{claudeRes.insight}</p>
       </>
     )
   }
