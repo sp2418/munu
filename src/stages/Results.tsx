@@ -53,6 +53,7 @@ function Results() {
     )
     const data = await response.json()
     const previewUrl = data.results[0]?.previewUrl
+    console.log(previewUrl)
     return (
       <audio controls src={previewUrl} />
     )
