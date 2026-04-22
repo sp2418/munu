@@ -94,7 +94,8 @@ function Results() {
       const verifyGradualShiftSongs = await verifySongs(claudeRes.gradualShiftSongs)
       setGradualSongs(verifyGradualShiftSongs)
 
-      handleSongPreview(desiredSongs)
+      const allSongs = [...verifyDesiredSongs, ...verifyGradualShiftSongs]
+      handleSongPreview(allSongs)
 
     }
 
@@ -128,6 +129,26 @@ function Results() {
         <p>Hoiiii! This is the results stage.</p>
         {claudeRes && (
           <div>
+            {
+              gradualSongs.map((song: any) => (
+                <div>
+                  <p>song.title</p>
+                  <p>song.artist</p>
+                  <p>song.explanation</p>
+                </div>
+
+              ))
+            }
+            {
+              desiredSongs.map((song: any) => (
+                <div>
+                  <p>song.title</p>
+                  <p>song.artist</p>
+                  <p>song.explanation</p>
+                </div>
+
+              ))
+            }
             <p>{claudeRes.insight}</p>
             {
               previews.map((previewUrl: any) => (
