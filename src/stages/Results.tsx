@@ -60,8 +60,9 @@ function Results() {
         let isVerified: boolean = true
         const title = song.title
         const artist = song.artist
+        const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
 
-        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${artist}`)
+        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${cleanArtist}`)
         const result = await response.json()
 
         const items = result.tracks?.items
@@ -128,8 +129,9 @@ function Results() {
   const handleSongPreview = async (songs: any[]) => {
     const songsWithPreviews: any[] = []
     for (const song of songs){
+      const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
       const response = await fetch(
-        `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
+        `https://itunes.apple.com/search?term=${song.title}+${cleanArtist}&media=music&entity=song&limit=1`
       )
       const data = await response.json()
       const result = data.results[0]
