@@ -72,20 +72,24 @@ function Onboarding({setView}: OnboardingProps) {
             setSpotifyArtists([])
             return
         }
-        const fetchArtists = async () => {
-            const results = await searchArtists(searchTermArtist)
-            const artists = results.artists.items.map((artist : SpotifyArtist) => [artist.name, artist.images])
-            // console.log("hi", artistNames)
-            // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
-            // console.log("hi", results.artists.items)
-            if (isActive) {
-                setSpotifyArtists(artists)
+
+        const timer = setTimeout(() => {
+            const fetchArtists = async () => {
+                const results = await searchArtists(searchTermArtist)
+                const artists = results.artists.items.map((artist : SpotifyArtist) => [artist.name, artist.images])
+                // console.log("hi", artistNames)
+                // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
+                // console.log("hi", results.artists.items)
+                if (isActive) {
+                    setSpotifyArtists(artists)
+                }
             }
-        }
-        fetchArtists()
+            fetchArtists()
+        }, 300) 
 
         return () => {
             isActive = false
+            clearTimeout(timer)
         }
     }, [searchTermArtist])
 
@@ -142,32 +146,38 @@ function Onboarding({setView}: OnboardingProps) {
             setSpotifyTracks([])
             return
         }
-        const fetchTracks = async () => {
-            const results = await searchTracks(searchTermTrack)
-            const uniqueTracks = await results.tracks.items.filter(
-                (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
-                    index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
-            )
-            const tracks: [string, string[]][] = []
-            console.log("yo", uniqueTracks)
-            uniqueTracks.forEach((track : SpotifyTrack) => {
-                const trackName = track.name
-                // console.log("name", trackName)
-                const trackArtists: string[] = []
-                track.artists.forEach(artist => trackArtists.push(artist.name))
-                // console.log('artists', trackArtists)
-                tracks.push([trackName, trackArtists])
-            })
-            // console.log('list of tracks', tracks)
-            setSpotifyTracks(tracks)
-            // // console.log("hi", artistNames)
-            // // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
-            // // console.log("hi", results.artists.items)
-            // if (isActive) {
-            //     setSpotifyArtists(tracks)
-            // }
-        }
-        fetchTracks()
+
+        const timer = setTimeout(() => {
+            const fetchTracks = async () => {
+                const results = await searchTracks(searchTermTrack)
+                const uniqueTracks = await results.tracks.items.filter(
+                    (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
+                        index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
+                )
+                const tracks: [string, string[]][] = []
+                console.log("yo", uniqueTracks)
+                uniqueTracks.forEach((track : SpotifyTrack) => {
+                    const trackName = track.name
+                    // console.log("name", trackName)
+                    const trackArtists: string[] = []
+                    track.artists.forEach(artist => trackArtists.push(artist.name))
+                    // console.log('artists', trackArtists)
+                    tracks.push([trackName, trackArtists])
+                })
+                // console.log('list of tracks', tracks)
+                setSpotifyTracks(tracks)
+                // // console.log("hi", artistNames)
+                // // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
+                // // console.log("hi", results.artists.items)
+                // if (isActive) {
+                //     setSpotifyArtists(tracks)
+                // }
+            }
+            fetchTracks()
+        }, 300)
+
+        return () => clearTimeout(timer)
+        
 
         // return () => {
         //     isActive = false
