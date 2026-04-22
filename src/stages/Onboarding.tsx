@@ -85,7 +85,7 @@ function Onboarding({setView}: OnboardingProps) {
                 }
             }
             fetchArtists()
-        }, 300) 
+        }, 500) 
 
         return () => {
             isActive = false
@@ -174,7 +174,7 @@ function Onboarding({setView}: OnboardingProps) {
                 // }
             }
             fetchTracks()
-        }, 300)
+        }, 500)
 
         return () => clearTimeout(timer)
         
