@@ -65,12 +65,17 @@ function Results() {
         const result = await response.json()
 
         const items = result.tracks?.items
+        const returnedTrack = items[0]
+
+
+        console.log(`Verifying: ${title} by ${artist}`)
+        console.log("items returned:", items)
 
         if (!items || items.length === 0) {
+          console.log(`DROPPED at Spotify - no items returned for: ${title}`)
           isVerified = false
         }
         else{
-          const returnedTrack = items[0]
 
           const normalize = (str: string) =>
             str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -80,11 +85,7 @@ function Results() {
             normalize(a.name).includes(normalize(artist))
           )
 
-          console.log("title:", title)
-          console.log("artist:", artist)
-          console.log("items:", items)
-          console.log("trackMatches:", trackMatches)
-          console.log("artistMatches:", artistMatches)
+          console.log(`trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
 
           isVerified = trackMatches && artistMatches
 
@@ -92,6 +93,10 @@ function Results() {
 
         if (isVerified === true){
           verifiedSongs.push(song)
+        }
+        else {
+          console.log(`DROPPED at matching - ${title} by ${artist}`)
+          console.log(`Spotify returned: ${returnedTrack.name} by ${returnedTrack.artists.map((a: any) => a.name).join(", ")}`)
         }
       }
       return verifiedSongs
@@ -124,7 +129,11 @@ function Results() {
       const data = await response.json()
       const result = data.results[0]
 
+      console.log(`iTunes lookup: ${song.title} by ${song.artist}`)
+      console.log("iTunes result:", result)
+
       if (!result) {
+        console.log(`DROPPED at iTunes - no result for: ${song.title}`)
         songsWithPreviews.push({...song, previewUrl: null})
 
       }
@@ -132,9 +141,9 @@ function Results() {
         const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
         const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
 
-        console.log("result:", result)
-        console.log("trackMatches:", trackMatches)
-        console.log("artistMatches:", artistMatches)
+        console.log(`iTunes trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
+        console.log(`iTunes returned: ${result.trackName} by ${result.artistName}`)
+
 
         const previewUrl = trackMatches && artistMatches ? result.previewUrl : null
 
