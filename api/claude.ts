@@ -40,9 +40,18 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         1. Suggest how the current music they’re listening to may be affecting their emotional state. Remember to be warm and supportive. Use phrases like “may be affecting” instead of “is causing”.
         2. Have an explanation on what the iso principle is and how you are using the principle to offer song suggestions to help them emotionally process what they are going through. Explain it in warm, accessible language as if you’re speaking directly to the user.
-        3. Then, suggest 10 songs that can help them gradually shift to a desired state that helps them emotionally process what they are going through with the use of the iso-principle. Make sure the song suggestions align with their music taste. When suggesting songs, prioritize songs that are real and verifiable on Spotify. Suggest songs that are moderately well known — not necessarily chart hits, but recognizable within the artist's discography or genre. Avoid very obscure deep cuts or rare tracks that may be hard to verify. The goal is a balance between music discovery and reliability.
-        4. Offer explanations on how those 6 suggested songs can help them process. 
-        5. Lastly, suggest 10 other songs that can represent them once they’re fully in their desired state after emotionally processing what they’re going through. The desired state represents a future state where the user has completed emotionally processing what they are going through and hopefully feels more positively about their circumstances in general. Make sure the song suggestions align with their music taste. Also, offer explanations on how each of these songs represents the users desired state. When suggesting songs, prioritize songs that are real and verifiable on Spotify. Suggest songs that are moderately well known — not necessarily chart hits, but recognizable within the artist's discography or genre. Avoid very obscure deep cuts or rare tracks that may be hard to verify. The goal is a balance between music discovery and reliability.
+        3. Then, suggest 10 songs that can help them gradually shift to a desired state that helps them emotionally process what they are going through with the use of the iso-principle. Make sure the song suggestions align with their music taste. 
+        4. Offer explanations on how those suggested songs can help them process. 
+        5. Lastly, suggest 10 other songs that can represent them once they’re fully in their desired state after emotionally processing what they’re going through. The desired state represents a future state where the user has completed emotionally processing what they are going through and hopefully feels more positively about their circumstances in general. Make sure the song suggestions align with their music taste. Also, offer explanations on how each of these songs represents the users desired state. 
+
+        Important guidelines that apply to all song suggestions:
+        When suggesting songs, prioritize deeper cuts, album tracks, and lesser known songs within the artist's discography over their biggest hits or most streamed songs. 
+        Avoid suggesting songs that are extremely well known or overplayed. 
+        The goal is music discovery — expose the user to songs they likely haven't heard before but that align closely with their taste. It is okay to suggest songs from well known artists, but choose their more obscure or underappreciated tracks rather than their chart hits. 
+        Do not suggest more than 2 songs from the same artist across the entire list. 
+        Prioritize a diverse range of artists that align with the user's taste profile but also introduce them to new artists they may not have heard of before. 
+        If suggesting a well known artist, choose a lesser known collaborator or feature that might expose the user to a new artist.
+        Make sure every suggested song is real and verifiable on Spotify.
 
         Return a JSON with these specific fields:
         - insight: contains output for Step 1
