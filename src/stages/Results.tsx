@@ -27,7 +27,7 @@ function Results() {
   // const [error, setError] = useState<string | null>(null)
 
   const [claudeRes, setClaudeRes] = useState<any>(null)
-  const [previews, setPreviews] = useState<any>([])
+  // const [previews, setPreviews] = useState<any[]>([])
 
   const [desiredSongs, setDesiredSongs] = useState<any[]>([])
   const [gradualSongs, setGradualSongs] = useState<any[]>([])
@@ -89,13 +89,12 @@ function Results() {
 
     const checkSongs = async () => {
       const verifyDesiredSongs = await verifySongs(claudeRes.desiredStateSongs)
-      setDesiredSongs(verifyDesiredSongs)
+      const desiredWithPreviews = await handleSongPreview(verifyDesiredSongs)
+      setDesiredSongs(desiredWithPreviews)  
 
       const verifyGradualShiftSongs = await verifySongs(claudeRes.gradualShiftSongs)
-      setGradualSongs(verifyGradualShiftSongs)
-
-      const allSongs = [...verifyDesiredSongs, ...verifyGradualShiftSongs]
-      handleSongPreview(allSongs)
+      const gradualWithPreviews = await handleSongPreview(verifyGradualShiftSongs)
+      setGradualSongs(gradualWithPreviews)
 
     }
 
@@ -105,19 +104,18 @@ function Results() {
 
   }, [claudeRes])
 
+
   const handleSongPreview = async (songs: any[]) => {
-    if (claudeRes) {
-      const urls: any[] = []
-      for (const song of songs){
-        const response = await fetch(
-          `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
-        )
-        const data = await response.json()
-        const previewUrl = data.results[0]?.previewUrl
-        urls.push(previewUrl)
-      }
-      setPreviews(urls)
+    const songsWithPreviews: any[] = []
+    for (const song of songs){
+      const response = await fetch(
+        `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
+      )
+      const data = await response.json()
+      const previewUrl = data.results[0]?.previewUrl
+      songsWithPreviews.push({...song, previewUrl})
     }
+    return songsWithPreviews
   }
 
 
@@ -135,6 +133,7 @@ function Results() {
                   <p>{song.title}</p>
                   <p>{song.artist}</p>
                   <p>{song.explanation}</p>
+                  <audio controls src={song.previewUrl} />
                 </div>
 
               ))
@@ -145,16 +144,17 @@ function Results() {
                   <p>{song.title}</p>
                   <p>{song.artist}</p>
                   <p>{song.explanation}</p>
+                  <audio controls src={song.previewUrl} />
                 </div>
 
               ))
             }
             <p>{claudeRes.insight}</p>
-            {
+            {/* {
               previews.map((previewUrl: any) => (
                 <audio controls src={previewUrl} />
               ))
-            }
+            } */}
           </div>)
         }
       </>
