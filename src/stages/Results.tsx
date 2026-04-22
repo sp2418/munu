@@ -76,6 +76,12 @@ function Results() {
             a.name.toLowerCase().includes(artist.toLowerCase())
           )
 
+          console.log("title:", title)
+          console.log("artist:", artist)
+          console.log("items:", items)
+          console.log("trackMatches:", trackMatches)
+          console.log("artistMatches:", artistMatches)
+
           isVerified = trackMatches && artistMatches
 
         }
@@ -122,6 +128,10 @@ function Results() {
         const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
         const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
 
+        console.log("result:", result)
+        console.log("trackMatches:", trackMatches)
+        console.log("artistMatches:", artistMatches)
+
         const previewUrl = trackMatches && artistMatches ? result.previewUrl : null
 
         songsWithPreviews.push({ ...song, previewUrl })
@@ -146,7 +156,7 @@ function Results() {
                   <p>{song.title}</p>
                   <p>{song.artist}</p>
                   <p>{song.explanation}</p>
-                  <audio controls src={song.previewUrl} />
+                  {song.previewUrl && <audio controls src={song.previewUrl} />}
                 </div>
 
               ))
@@ -157,7 +167,7 @@ function Results() {
                   <p>{song.title}</p>
                   <p>{song.artist}</p>
                   <p>{song.explanation}</p>
-                  <audio controls src={song.previewUrl} />
+                  {song.previewUrl && <audio controls src={song.previewUrl} />}
                 </div>
 
               ))
