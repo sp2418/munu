@@ -71,9 +71,12 @@ function Results() {
         else{
           const returnedTrack = items[0]
 
-          const trackMatches = returnedTrack.name.toLowerCase().includes(title.toLowerCase())
-          const artistMatches = returnedTrack.artists.some((a: {name: string}) => 
-            a.name.toLowerCase().includes(artist.toLowerCase())
+          const normalize = (str: string) =>
+            str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+          
+          const trackMatches = returnedTrack.name && normalize(returnedTrack.name).includes(normalize(title))
+          const artistMatches = returnedTrack.artists.some((a: { name: string }) =>
+            normalize(a.name).includes(normalize(artist))
           )
 
           console.log("title:", title)
