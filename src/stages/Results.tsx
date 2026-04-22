@@ -132,9 +132,9 @@ function Results() {
             {
               gradualSongs.map((song: any) => (
                 <div>
-                  <p>song.title</p>
-                  <p>song.artist</p>
-                  <p>song.explanation</p>
+                  <p>{song.title}</p>
+                  <p>{song.artist}</p>
+                  <p>{song.explanation}</p>
                 </div>
 
               ))
@@ -142,9 +142,9 @@ function Results() {
             {
               desiredSongs.map((song: any) => (
                 <div>
-                  <p>song.title</p>
-                  <p>song.artist</p>
-                  <p>song.explanation</p>
+                  <p>{song.title}</p>
+                  <p>{song.artist}</p>
+                  <p>{song.explanation}</p>
                 </div>
 
               ))
