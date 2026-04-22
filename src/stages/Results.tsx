@@ -65,7 +65,7 @@ function Results() {
         const result = await response.json()
 
         const items = result.tracks?.items
-        const returnedTrack = items[0]
+
 
 
         console.log(`Verifying: ${title} by ${artist}`)
@@ -76,6 +76,7 @@ function Results() {
           isVerified = false
         }
         else{
+          const returnedTrack = items[0]
 
           const normalize = (str: string) =>
             str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -91,12 +92,16 @@ function Results() {
 
         }
 
+        const returnedTrack = items?.[0]
         if (isVerified === true){
           verifiedSongs.push(song)
         }
         else {
           console.log(`DROPPED at matching - ${title} by ${artist}`)
-          console.log(`Spotify returned: ${returnedTrack.name} by ${returnedTrack.artists.map((a: any) => a.name).join(", ")}`)
+          if (returnedTrack){
+            console.log(`Spotify returned: ${returnedTrack.name} by ${returnedTrack.artists.map((a: any) => a.name).join(", ")}`)
+
+          }
         }
       }
       return verifiedSongs
