@@ -112,8 +112,21 @@ function Results() {
         `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
       )
       const data = await response.json()
-      const previewUrl = data.results[0]?.previewUrl
-      songsWithPreviews.push({...song, previewUrl})
+      const result = data.results[0]
+
+      if (!result) {
+        songsWithPreviews.push({...song, previewUrl: null})
+
+      }
+      else{
+        const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
+        const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
+
+        const previewUrl = trackMatches && artistMatches ? result.previewUrl : null
+
+        songsWithPreviews.push({ ...song, previewUrl })
+      }
+
     }
     return songsWithPreviews
   }
