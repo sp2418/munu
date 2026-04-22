@@ -29,6 +29,9 @@ function Results() {
   const [claudeRes, setClaudeRes] = useState<any>(null)
   const [previews, setPreviews] = useState<any>([])
 
+  const [desiredSongs, setDesiredSongs] = useState<any[]>([])
+  const [gradualSongs, setGradualSongs] = useState<any[]>([])
+
 
 
   useEffect(() => {
@@ -49,15 +52,62 @@ function Results() {
 
 
   useEffect(() => {
+
+    const verifySongs = async (songs: any[]) => {
+      const verifiedSongs = []
+      for (const song of songs) {
+        let isVerified: boolean = true
+        const title = song.title
+        const artist = song.artist
+
+        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${artist}`)
+        const result = await response.json()
+
+        const items = result.tracks?.items
+
+        if (!items || items.length === 0) {
+          isVerified = false
+        }
+        else{
+          const returnedTrack = items[0]
+
+          const trackMatches = returnedTrack.name.toLowerCase().includes(title.toLowerCase())
+          const artistMatches = returnedTrack.artists.some((a: {name: string}) => 
+            a.name.toLowerCase().includes(artist.toLowerCase())
+          )
+
+          isVerified = trackMatches && artistMatches
+
+        }
+
+        if (isVerified === true){
+          verifiedSongs.push(song)
+        }
+      }
+      return verifiedSongs
+    }
+
+    const checkSongs = async () => {
+      const verifyDesiredSongs = await verifySongs(claudeRes.desiredStateSongs)
+      setDesiredSongs(verifyDesiredSongs)
+
+      const verifyGradualShiftSongs = await verifySongs(claudeRes.gradualShiftSongs)
+      setGradualSongs(verifyGradualShiftSongs)
+
+      handleSongPreview(desiredSongs)
+
+    }
+
     if (!claudeRes) return
-    handleSongPreview()
+    checkSongs()
+
 
   }, [claudeRes])
 
-  const handleSongPreview = async () => {
+  const handleSongPreview = async (songs: any[]) => {
     if (claudeRes) {
-      const urls: string[] = []
-      for (const song of claudeRes.gradualShiftSongs){
+      const urls: any[] = []
+      for (const song of songs){
         const response = await fetch(
           `https://itunes.apple.com/search?term=${song.title}+${song.artist}&media=music&entity=song&limit=1`
         )

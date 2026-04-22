@@ -2,7 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 
 export default async function handleSpotifySearch(req: VercelRequest, res: VercelResponse) {
-    const {q , type} = req.query
+    const {q , type, artist} = req.query
+    const query = artist ? `track:"${q}" artist:"${artist}"` : q as string
     const spotifyClientId = process.env.SPOTIFY_CLIENT_ID
     const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET
 
@@ -22,7 +23,7 @@ export default async function handleSpotifySearch(req: VercelRequest, res: Verce
     const spotifyToken = token_data.access_token
 
 
-    const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${q}&type=${type}&limit=10`, {
+    const searchResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=${type}&limit=10`, {
         method: "GET",
         headers: {
             'Authorization': 'Bearer ' + spotifyToken
