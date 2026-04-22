@@ -84,7 +84,7 @@ function Results() {
           
           const trackMatches = returnedTrack.name && normalize(returnedTrack.name).includes(normalize(title))
           const artistMatches = returnedTrack.artists.some((a: { name: string }) =>
-            normalize(a.name).includes(normalize(artist))
+            normalize(a.name).includes(normalize(cleanArtist))
           )
 
           console.log(`trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
@@ -145,8 +145,13 @@ function Results() {
 
       }
       else{
-        const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
-        const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
+        const normalize = (str: string) =>
+          str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        
+        // const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
+        // const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
+        const trackMatches = normalize(result.trackName).includes(normalize(song.title))
+        const artistMatches = normalize(result.artistName).includes(normalize(cleanArtist))
 
         console.log(`iTunes trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
         console.log(`iTunes returned: ${result.trackName} by ${result.artistName}`)
