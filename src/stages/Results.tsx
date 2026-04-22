@@ -18,10 +18,20 @@ import { useState,useEffect } from "react"
 function Results() {
 
   const storedBaseline = localStorage.getItem('musicBaseline')
-  const baseline = storedBaseline ? JSON.parse(storedBaseline) : null
+  const baseline = storedBaseline ? JSON.parse(storedBaseline) as {
+    favGenres: string[],
+    favArtists: string[],
+    favTracks: [string,string[]][],
+    personalContexts: string[],
+    addContext: string
+  } : null
 
   const storedEmotContext = localStorage.getItem('currEmotContext')
-  const currEmotContext = storedEmotContext ?  JSON.parse(storedEmotContext) : null
+  const currEmotContext = storedEmotContext ?  JSON.parse(storedEmotContext) as {
+    currRant: string,
+    currTracks: [string,string[]][],
+    emotions: string[]
+  } : null
 
   // const [loading, setLoading] = useState<boolean>(true)
   // const [error, setError] = useState<string | null>(null)
@@ -38,7 +48,7 @@ function Results() {
 
     const fetchClaudeResponse = async (retries = 3) => {
       try {
-        const response = await fetch(`/api/claude`)
+        const response = await fetch(`/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`)
         const data = await response.json()
         const cleaned = data.response.replace(/```json|```/g, '').trim()
         console.log("raw response", cleaned)

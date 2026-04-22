@@ -1,7 +1,28 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Anthropic from "@anthropic-ai/sdk";
 
+interface handleClaude {
+    baseline: {
+        favGenres: string[],
+        favArtists: string[],
+        favTracks: [string,string[]][],
+        personalContexts: string[],
+        addContext: string
+    };
+    
+    currEmotContext: {
+        currRant: string,
+        currTracks: [string,string[]][],
+        emotions: string[]
+    };
+}
+
 export default async function handleClaude(req: VercelRequest, res: VercelResponse) {
+    const { baseline: baselineRaw, currEmotContext: currEmotContextRaw } = req.query
+
+    const baseline = JSON.parse(baselineRaw as string) as handleClaude['baseline']
+    const currEmotContext = JSON.parse(currEmotContextRaw as string) as handleClaude['currEmotContext']
+
     const claudeAPIKey = process.env.CLAUDE_API_KEY
     if (!claudeAPIKey) {
         return res.status(500).json({ error: 'Missing Anthropic API key' })
@@ -16,24 +37,24 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         Here is some information about the user’s music taste:
 
-        Favorite Genres: Hip Hop, R&B, Pop, Afrobeats
+        Favorite Genres: ${baseline.favGenres.join(", ")}
 
-        Favorite Artists: KAYTRANADA, Megan Thee Stallion, PinkPantheress, Doja Cat, Doechii, Jhene Aiko, Ariana Grande, Bad Bunny, Tamae, Sabrina Carpenter
+        Favorite Artists: ${baseline.favArtists.join(", ")}
 
-        Favorite Tracks: Hmmm by Chris Brown and Davido, Jealous Type by Doja Cat, Sugar Talking by Sabrina Carpenter, Wait on Us by Tamae and Bastian Beli, TARGET JOINT by KAYTRANADA
+        Favorite Tracks: ${baseline.favTracks.map(([title, artists]) => `${title} by ${artists.join(", ")}`).join(", ")}
 
-        Life Contexts when they listen to music: Working out, socializing, getting ready, driving, processing emotions
+        Life Contexts when they listen to music: ${baseline.personalContexts.join(", ")}
 
-        What they think about their relationship with music: Music has been a huge part of my life. I’ve listened to it to help me process what I’ve been through. Sometimes I listen to it just for fun to, especially since I am a dancer. It just makes life a lot more vibrant for me, and I get really excited when I come across new music that I can vibe with. 
+        What they think about their relationship with music: ${baseline.addContext}
 
 
         Here is information about how the user is actually currently feeling:
 
-        What they are feeling recently: I’ve been pretty anxious or restless or even just frustrated over the job search recently. I feel like it’s consuming most of my life, and I don’t know how to enjoy life when the goal of finding a job is looming over my head. Getting a job in tech has been surprisingly emotionally taxing. I’m doing my best, but I’ve been at this for months. I really hope I get a job soon. 
+        What they are feeling recently: ${currEmotContext.currRant}
 
-        Their current emotions: Anxious, Overwhelmed, Stressed, Hopeful, Restless, Drained
+        Their current emotions: ${currEmotContext.emotions.join(", ")}
 
-        Songs they’re listening to recently: Girl Like Me + Kaytranada by PinkPantheress and KAYTRANADA, What’s the Use? By Mac Miller, Dang! (feat. Anderson.Paak) by Mac Miller and Anderson.Paak, borderline by Ariana Grande and Missy Elliott
+        Songs they’re listening to recently: ${currEmotContext.currTracks.map(([title, artists]) => `${title} by ${artists.join(", ")}`).join(", ")}
 
 
         Specific Task Instructions:
@@ -71,7 +92,7 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         `
 
-
+    console.log("prompt", prompt)
 
     const client = new Anthropic({
         apiKey: claudeAPIKey // This is the default and can be omitted
