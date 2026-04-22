@@ -36,14 +36,25 @@ function Results() {
 
   useEffect(() => {
 
-    const fetchClaudeResponse = async () => {
-      const response = await fetch(`/api/claude`)
-      const data = await response.json()
-      const cleaned = data.response.replace(/```json|```/g, '').trim()
-      console.log("raw response", cleaned)
-      const parsed = JSON.parse(cleaned)
-      setClaudeRes(parsed)
-      console.log("claude response", parsed)
+    const fetchClaudeResponse = async (retries = 3) => {
+      try {
+        const response = await fetch(`/api/claude`)
+        const data = await response.json()
+        const cleaned = data.response.replace(/```json|```/g, '').trim()
+        console.log("raw response", cleaned)
+        const parsed = JSON.parse(cleaned)
+        setClaudeRes(parsed)
+        console.log("claude response", parsed)
+      }
+      catch (error) {
+        if (retries > 0){
+          console.log('Retrying... ${retries} attempts left')
+          await fetchClaudeResponse(retries - 1)
+        }
+        else{
+          console.error("Failed after multiple attempts:", error)
+        }
+      }
       // const data = await response.json()
       // return data
     }

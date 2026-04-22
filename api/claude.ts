@@ -52,12 +52,12 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         - desiredStateSongs: contains output for Step 5
             - Example of format: "desiredStateSongs": [{"title": "...", "artist": "...", "explanation": "..."}]
 
-        Return ONLY a JSON object. No additional text before or after.
-
         Important: the title and artist fields must contain ONLY the song title and artist name respectively. 
         No explanations, alternatives, parentheses, special characters, bullet points, or additional text in these fields.
         All reasoning and explanations belong only in the explanation field.
         The artist field should contain only the primary artist name, no featured artists.
+
+        Return ONLY a JSON object. No additional text before or after, no trailing commas, and no unescaped special characters.
 
 
         `
