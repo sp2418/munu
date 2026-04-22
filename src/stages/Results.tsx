@@ -55,6 +55,7 @@ function Results() {
 
     const verifySongs = async (songs: any[]) => {
       const verifiedSongs = []
+      console.log("number of songs", songs.length)
       for (const song of songs) {
         let isVerified: boolean = true
         const title = song.title
