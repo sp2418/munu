@@ -40,6 +40,7 @@ function Results() {
       const response = await fetch(`/api/claude`)
       const data = await response.json()
       const cleaned = data.response.replace(/```json|```/g, '').trim()
+      console.log("raw response", cleaned)
       const parsed = JSON.parse(cleaned)
       setClaudeRes(parsed)
       console.log("claude response", parsed)
