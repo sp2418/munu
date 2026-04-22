@@ -48,7 +48,9 @@ function Results() {
 
     const fetchClaudeResponse = async (retries = 3) => {
       try {
-        const response = await fetch(`/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`)
+        const url = `/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`
+        console.log("fetch url", url)
+        const response = await fetch(url)
         const data = await response.json()
         const cleaned = data.response.replace(/```json|```/g, '').trim()
         console.log("raw response", cleaned)

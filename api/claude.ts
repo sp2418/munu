@@ -19,6 +19,10 @@ interface handleClaude {
 
 export default async function handleClaude(req: VercelRequest, res: VercelResponse) {
     const { baseline: baselineRaw, currEmotContext: currEmotContextRaw } = req.query
+    console.log("req.query:", req.query)
+
+    console.log("baselineRaw:", baselineRaw)
+    console.log("currEmotContextRaw:", currEmotContextRaw)
 
     const baseline = JSON.parse(baselineRaw as string) as handleClaude['baseline']
     const currEmotContext = JSON.parse(currEmotContextRaw as string) as handleClaude['currEmotContext']
