@@ -1,5 +1,6 @@
 import QuestionBlock from "../components/QuestionBlock"
 import QuestionStageLayout from "../components/QuestionStageLayout"
+import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 
 import { useState, useEffect } from "react"
 
@@ -113,7 +114,7 @@ function CheckIn({setView}: CheckInProps) {
         disc_number: number
         duration_ms: number
         explicit: boolean
-        external_ids: { isrc: string }
+        external_ids?: { isrc?: string }
         external_urls: { spotify: string }
         href: string
         id: string
@@ -134,8 +135,8 @@ function CheckIn({setView}: CheckInProps) {
         const fetchTracks = async () => {
             const results = await searchTracks(searchTermTrack)
             const uniqueTracks = results.tracks.items.filter(
-                (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
-                    index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
+                (track: SpotifyTrack, index: number, self: SpotifyTrack[]) =>
+                    index === self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track))
             )
             const tracks: CheckInTrack[] = uniqueTracks.map((track: SpotifyTrack) => ({
                 id: track.id,
@@ -232,7 +233,9 @@ function CheckIn({setView}: CheckInProps) {
                 searchTerm={searchTermTrack}
                 onSearchTermChange={setSearchTermTrack}
                 placeholder="Search for a track..."
-                results={spotifyTracks.map((track) => ({
+                results={spotifyTracks
+                    .filter((track) => !listOfTracks.some((picked) => picked.id === track.id))
+                    .map((track) => ({
                     id: track.id,
                     label: `${track.name} by ${formatArtists(track.artists)}`,
                     onSelect: () => handleAddTrack(track)

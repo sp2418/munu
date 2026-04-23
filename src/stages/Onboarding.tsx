@@ -1,6 +1,7 @@
 import QuestionBlock from "../components/QuestionBlock"
 import QuestionStageLayout from "../components/QuestionStageLayout"
 import { Button } from "../components/ui/button"
+import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 
 import { useState, useEffect } from "react"
 
@@ -129,7 +130,7 @@ function Onboarding({setView}: OnboardingProps) {
         disc_number: number
         duration_ms: number
         explicit: boolean
-        external_ids: { isrc: string }
+        external_ids?: { isrc?: string }
         external_urls: { spotify: string }
         href: string
         id: string
@@ -152,9 +153,9 @@ function Onboarding({setView}: OnboardingProps) {
         const timer = setTimeout(() => {
             const fetchTracks = async () => {
                 const results = await searchTracks(searchTermTrack)
-                const uniqueTracks = await results.tracks.items.filter(
-                    (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
-                        index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
+                const uniqueTracks = results.tracks.items.filter(
+                    (track: SpotifyTrack, index: number, self: SpotifyTrack[]) =>
+                        index === self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track))
                 )
                 const tracks: TrackOption[] = []
                 uniqueTracks.forEach((track : SpotifyTrack) => {
@@ -358,7 +359,9 @@ function Onboarding({setView}: OnboardingProps) {
                     searchTerm={searchTermTrack}
                     onSearchTermChange={setSearchTermTrack}
                     placeholder="Search for a track..."
-                    results={spotifyTracks.map((track) => ({
+                    results={spotifyTracks
+                        .filter((track) => !listOfTracks.some((picked) => picked.id === track.id))
+                        .map((track) => ({
                         id: track.id,
                         label: `${track.name} by ${formatArtists(track.artists)}`,
                         onSelect: () => handleAddTrack(track)

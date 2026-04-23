@@ -119,11 +119,12 @@ function QuestionBlock(props: QuestionBlockProps) {
         }`}
       >
         {props.kind === "multiple-choice" && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             {props.options.map((option) => (
               <Badge
                 key={option}
                 variant={props.selectedValues.includes(option) ? "default" : "outline"}
+                className="h-auto min-h-10 cursor-pointer rounded-xl px-4 py-2.5 text-sm leading-snug"
                 onClick={() => props.onToggle(option)}
               >
                 {option}
