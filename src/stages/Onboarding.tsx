@@ -1,15 +1,6 @@
-import { Badge } from "../components/ui/badge"
-
-import { X } from "lucide-react"
-
-import {
-Command,
-CommandInput,
-CommandItem,
-CommandList,
-} from "../components/ui/command"
-
-import { Textarea } from "../components/ui/textarea"
+import QuestionBlock from "../components/QuestionBlock"
+import QuestionStageLayout from "../components/QuestionStageLayout"
+import { Button } from "../components/ui/button"
 
 import { useState, useEffect } from "react"
 
@@ -63,7 +54,7 @@ function Onboarding({setView}: OnboardingProps) {
         uri: string
     }
 
-    const [spotifyArtists, setSpotifyArtists] = useState<String[]>([])
+    const [spotifyArtists, setSpotifyArtists] = useState<[string, {height: number, url: string, width: number}][]>([])
 
     useEffect(() => {
         let isActive = true
@@ -229,6 +220,8 @@ function Onboarding({setView}: OnboardingProps) {
     const [listGenres, setListGenres] = useState<string[]>([])
     const [listContexts, setListContexts] = useState<string[]>([])
     const [additionalContext, setAdditionalContext] = useState<string>("")
+    const [showWelcomeScreen, setShowWelcomeScreen] = useState(true)
+    const [currentQuestion, setCurrentQuestion] = useState(0)
 
     const handleAddArtist = (artist: string) => {
         if (!listOfArtists.includes(artist)){
@@ -293,6 +286,115 @@ function Onboarding({setView}: OnboardingProps) {
         setView("checkin")
     }
 
+    const totalQuestions = 5
+    const isLastQuestion = currentQuestion === totalQuestions - 1
+
+    const handleNext = () => {
+        if (showWelcomeScreen) {
+            setShowWelcomeScreen(false)
+            return
+        }
+
+        if (isLastQuestion) {
+            handleBaseline()
+            return
+        }
+        setCurrentQuestion(prev => prev + 1)
+    }
+
+    const handleBack = () => {
+        if (showWelcomeScreen) return
+        if (currentQuestion === 0) {
+            setShowWelcomeScreen(true)
+            return
+        }
+        setCurrentQuestion(prev => Math.max(prev - 1, 0))
+    }
+
+    const renderCurrentQuestion = () => {
+        if (currentQuestion === 0) {
+            return (
+                <QuestionBlock
+                    kind="multiple-choice"
+                    prompt="What are your favorite genres of music?"
+                    options={genres}
+                    selectedValues={listGenres}
+                    onToggle={handleAddGenre}
+                />
+            )
+        }
+
+        if (currentQuestion === 1) {
+            return (
+                <QuestionBlock
+                    kind="search"
+                    prompt="Who are your favorite artists?"
+                    searchTerm={searchTermArtist}
+                    onSearchTermChange={setSearchTermArtist}
+                    placeholder="Search for an artist..."
+                    results={spotifyArtists.map((artist) => ({
+                        id: artist[0],
+                        label: artist[0],
+                        onSelect: () => handleAddArtist(artist[0])
+                    }))}
+                    selectedItems={listOfArtists.map((artist) => ({
+                        id: artist,
+                        label: artist
+                    }))}
+                    onRemoveSelectedItem={handleRemoveArtist}
+                />
+            )
+        }
+
+        if (currentQuestion === 2) {
+            return (
+                <QuestionBlock
+                    kind="search"
+                    prompt="Can you give us a few examples of your favorite songs?"
+                    searchTerm={searchTermTrack}
+                    onSearchTermChange={setSearchTermTrack}
+                    placeholder="Search for a track..."
+                    results={spotifyTracks.map((track) => ({
+                        id: `${track[0]}-${track[1].join("-")}`,
+                        label: `${track[0]} by ${formatArtists(track[1])}`,
+                        onSelect: () => handleAddTrack(track)
+                    }))}
+                    selectedItems={listOfTracks.map((track) => ({
+                        id: `${track[0]}-${track[1].join("-")}`,
+                        label: `${track[0]} by ${formatArtists(track[1])}`
+                    }))}
+                    onRemoveSelectedItem={(trackId) => {
+                        const track = listOfTracks.find(
+                            (item) => `${item[0]}-${item[1].join("-")}` === trackId
+                        )
+                        if (track) handleRemoveTrack(track)
+                    }}
+                />
+            )
+        }
+
+        if (currentQuestion === 3) {
+            return (
+                <QuestionBlock
+                    kind="multiple-choice"
+                    prompt="When do you listen to music the most?"
+                    options={musicContexts}
+                    selectedValues={listContexts}
+                    onToggle={handleAddContext}
+                />
+            )
+        }
+
+        return (
+            <QuestionBlock
+                kind="textarea"
+                prompt="Is there anything else about your relationship with music you'd want us to know?"
+                value={additionalContext}
+                onChange={handleAdditionalContext}
+            />
+        )
+    }
+
     // useEffect(() => {
     //     const baseline = {
     //         favArtists: listOfArtists,
@@ -304,82 +406,34 @@ function Onboarding({setView}: OnboardingProps) {
     //     localStorage.setItem('musicBaseline', JSON.stringify(baseline))
     // }, [listOfArtists, listOfTracks, listGenres, listContexts, additionalContext])
 
+    if (showWelcomeScreen) {
+        return (
+            <div className="flex min-h-svh items-center justify-center px-6 py-10">
+                <div className="w-full max-w-3xl">
+                    <div key="onboarding-welcome" className="animate-in fade-in duration-500 space-y-4 text-center">
+                        <p>Hey! It's great to meet you :)</p>
+                        <p className="text-muted-foreground">We wanted to ask you a few questions before we get started.</p>
+                        <div className="pt-2">
+                            <Button type="button" onClick={handleNext}>Get Started</Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
-        <>
-            <p>Hey! It's great to meet you :) We wanted to ask you a few questions before we get started.</p>
-            <p>What are your favorite genres of music?</p>
-            <div className="flex flex-wrap gap-2">
-                {
-                    genres.map(genre => (
-                        <Badge variant={listGenres.includes(genre) ? "default" : "outline"} onClick={() => handleAddGenre(genre)}>
-                            {genre}
-                        </Badge>
-                    ))
-                }
-            </div>
-            <p>Who are your favorite artists?</p>
-            <Command shouldFilter={false}>
-                <CommandInput value={searchTermArtist} onValueChange={(value) => setSearchTermArtist(value)} placeholder="Search for an artist..." />
-                <CommandList>
-                    {/* <CommandEmpty>No results found.</CommandEmpty> */}
-                    {
-                        spotifyArtists.map(artist => (
-                            <CommandItem onSelect={() => handleAddArtist(artist[0])}>
-                                <span>{artist[0]}</span>
-                            </CommandItem>
-                        ))
-                    }
-                </CommandList>
-            </Command>
-            <div className="flex flex-wrap gap-2">
-                {
-                    listOfArtists.map(artist => (
-                        <Badge>
-                            {artist}
-                            <X className="cursor-pointer" onClick={() => handleRemoveArtist(artist)} />
-                        </Badge>
-                    ))
-                }
-            </div>
-            <p>Can you give us a few examples of your favorite songs?</p>
-            <Command shouldFilter={false}>
-                <CommandInput value={searchTermTrack} onValueChange={(value) => setSearchTermTrack(value)} placeholder="Search for a track..." />
-                <CommandList>
-                    {/* <CommandEmpty>No results found.</CommandEmpty> */}
-                    {
-                        spotifyTracks.map(track => (
-                            <CommandItem onSelect={() => handleAddTrack(track)}>
-                                <span>{track[0]} by {formatArtists(track[1])}</span>
-                            </CommandItem>
-                        ))
-                    }
-                </CommandList>
-            </Command>
-            <div className="flex flex-wrap gap-2">
-                {
-                    listOfTracks.map(track => (
-                        <Badge>
-                            {track[0]} by {formatArtists(track[1])}
-                            <X className="cursor-pointer" onClick={() => handleRemoveTrack(track)} />
-                        </Badge>
-                    ))
-                }
-            </div>
-            
-            <p>When do you listen to music the most?</p>
-            <div className="flex flex-wrap gap-2">
-                {
-                    musicContexts.map(context => (
-                        <Badge variant={listContexts.includes(context) ? "default" : "outline"} onClick={() => handleAddContext(context)}>
-                            {context}
-                        </Badge>
-                    ))
-                }
-            </div>
-            <p>Is there anything else about your relationship with music you'd want us to know?</p>
-            <Textarea value={additionalContext} onChange={handleAdditionalContext} />
-            <button onClick={handleBaseline}>Done</button>
-        </>
+        <QuestionStageLayout
+            currentQuestion={currentQuestion + 1}
+            totalQuestions={totalQuestions}
+            onBack={handleBack}
+            onNext={handleNext}
+            isBackDisabled={false}
+            nextLabel={isLastQuestion ? "Done" : "Next"}
+            questionKey={`onboarding-question-${currentQuestion}`}
+        >
+            {renderCurrentQuestion()}
+        </QuestionStageLayout>
     )
 }
 

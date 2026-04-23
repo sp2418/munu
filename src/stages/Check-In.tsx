@@ -1,15 +1,5 @@
-import { Badge } from "../components/ui/badge"
-
-import { X } from "lucide-react"
-
-import {
-Command,
-CommandInput,
-CommandItem,
-CommandList,
-} from "../components/ui/command"
-
-import { Textarea } from "../components/ui/textarea"
+import QuestionBlock from "../components/QuestionBlock"
+import QuestionStageLayout from "../components/QuestionStageLayout"
 
 import { useState, useEffect } from "react"
 
@@ -20,6 +10,7 @@ interface CheckInProps {
 function CheckIn({setView}: CheckInProps) {
     const [rantSesh, setRantSesh] = useState<string>("")
     const [listEmotions, setListEmotions] = useState<string[]>([])
+    const [currentQuestion, setCurrentQuestion] = useState(0)
 
     const handleRantSession = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setRantSesh(e.target.value)
@@ -53,9 +44,7 @@ function CheckIn({setView}: CheckInProps) {
             setListEmotions([...listEmotions, emotion])
         }
         else{
-            setListEmotions(listEmotions.filter((currEmot: string) => {
-                currEmot != emotion
-            }))
+            setListEmotions(listEmotions.filter((currEmot: string) => currEmot !== emotion))
         }
     }
 
@@ -193,6 +182,71 @@ function CheckIn({setView}: CheckInProps) {
         setView("results")
     }
 
+    const totalQuestions = 3
+    const isLastQuestion = currentQuestion === totalQuestions - 1
+
+    const handleNext = () => {
+        if (isLastQuestion) {
+            handleSesh()
+            return
+        }
+        setCurrentQuestion(prev => prev + 1)
+    }
+
+    const handleBack = () => {
+        setCurrentQuestion(prev => Math.max(prev - 1, 0))
+    }
+
+    const renderCurrentQuestion = () => {
+        if (currentQuestion === 0) {
+            return (
+                <QuestionBlock
+                    kind="textarea"
+                    prompt="What's been on your mind lately?"
+                    value={rantSesh}
+                    onChange={handleRantSession}
+                />
+            )
+        }
+
+        if (currentQuestion === 1) {
+            return (
+                <QuestionBlock
+                    kind="multiple-choice"
+                    prompt="What emotions are you feeling at the moment?"
+                    options={emotions}
+                    selectedValues={listEmotions}
+                    onToggle={handleAddEmotion}
+                />
+            )
+        }
+
+        return (
+            <QuestionBlock
+                kind="search"
+                prompt="Are there any songs that you've been listening to recently?"
+                searchTerm={searchTermTrack}
+                onSearchTermChange={setSearchTermTrack}
+                placeholder="Search for a track..."
+                results={spotifyTracks.map((track) => ({
+                    id: `${track[0]}-${track[1].join("-")}`,
+                    label: `${track[0]} by ${formatArtists(track[1])}`,
+                    onSelect: () => handleAddTrack(track)
+                }))}
+                selectedItems={listOfTracks.map((track) => ({
+                    id: `${track[0]}-${track[1].join("-")}`,
+                    label: `${track[0]} by ${formatArtists(track[1])}`
+                }))}
+                onRemoveSelectedItem={(trackId) => {
+                    const track = listOfTracks.find(
+                        (item) => `${item[0]}-${item[1].join("-")}` === trackId
+                    )
+                    if (track) handleRemoveTrack(track)
+                }}
+            />
+        )
+    }
+
     // useEffect(() => {
     //     const currEmotContext = {
     //         emotions: listEmotions,
@@ -204,46 +258,17 @@ function CheckIn({setView}: CheckInProps) {
 
   
     return (
-      <>
-        <p>What's been on your mind lately?</p>
-        <Textarea value={rantSesh} onChange={handleRantSession} />
-        <p>What emotions are you feeling at the moment?</p>
-        <div className="flex flex-wrap gap-2">
-            {
-                emotions.map(emotion => (
-                    <Badge variant={listEmotions.includes(emotion) ? "default" : "outline"} onClick={() => handleAddEmotion(emotion)}>
-                        {emotion}
-                    </Badge>
-                ))
-            }
-        </div>
-
-        <p>Are they any songs that you've been listening to recently?</p>
-        <Command shouldFilter={false}>
-            <CommandInput value={searchTermTrack} onValueChange={(value) => setSearchTermTrack(value)} placeholder="Search for a track..." />
-            <CommandList>
-                {/* <CommandEmpty>No results found.</CommandEmpty> */}
-                {
-                    spotifyTracks.map(track => (
-                        <CommandItem onSelect={() => handleAddTrack(track)}>
-                            <span>{track[0]} by {formatArtists(track[1])}</span>
-                        </CommandItem>
-                    ))
-                }
-            </CommandList>
-        </Command>
-        <div className="flex flex-wrap gap-2">
-            {
-                listOfTracks.map(track => (
-                    <Badge>
-                        {track[0]} by {formatArtists(track[1])}
-                        <X className="cursor-pointer" onClick={() => handleRemoveTrack(track)} />
-                    </Badge>
-                ))
-            }
-        </div>
-        <button onClick={handleSesh}>Done</button>
-      </>
+      <QuestionStageLayout
+        currentQuestion={currentQuestion + 1}
+        totalQuestions={totalQuestions}
+        onBack={handleBack}
+        onNext={handleNext}
+        isBackDisabled={currentQuestion === 0}
+        nextLabel={isLastQuestion ? "Done" : "Next"}
+        questionKey={`checkin-question-${currentQuestion}`}
+      >
+        {renderCurrentQuestion()}
+      </QuestionStageLayout>
     )
   }
 
