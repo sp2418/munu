@@ -1,5 +1,5 @@
 import { X } from "lucide-react"
-import { useEffect, useState, type ChangeEvent } from "react"
+import { useEffect, useRef, useState, type ChangeEvent } from "react"
 
 import { Badge } from "./ui/badge"
 import {
@@ -26,6 +26,8 @@ type SearchResultItem = {
 type SelectedItem = {
   id: string
   label: string
+  subtitle?: string
+  imageUrl?: string
 }
 
 type SearchQuestion = {
@@ -52,6 +54,8 @@ type QuestionBlockProps = {
 function QuestionBlock(props: QuestionBlockProps) {
   const { prompt } = props
   const [showRightContent, setShowRightContent] = useState(false)
+  const selectedItemsScrollRef = useRef<HTMLDivElement | null>(null)
+  const selectedSearchCount = props.kind === "search" ? (props.selectedItems?.length ?? 0) : 0
 
   useEffect(() => {
     setShowRightContent(false)
@@ -61,6 +65,18 @@ function QuestionBlock(props: QuestionBlockProps) {
 
     return () => window.clearTimeout(timer)
   }, [props.prompt, props.kind])
+
+  useEffect(() => {
+    if (props.kind !== "search" || selectedSearchCount === 0) return
+
+    const container = selectedItemsScrollRef.current
+    if (!container) return
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "smooth",
+    })
+  }, [props.kind, selectedSearchCount])
 
   return (
     <section className="grid gap-6 text-left md:grid-cols-2 md:items-start">
@@ -82,7 +98,13 @@ function QuestionBlock(props: QuestionBlockProps) {
             />
             <CommandList className="min-h-40">
               {props.results.map((result) => (
-                <CommandItem key={result.id} onSelect={result.onSelect}>
+                <CommandItem
+                  key={result.id}
+                  onSelect={() => {
+                    result.onSelect()
+                    props.onSearchTermChange("")
+                  }}
+                >
                   <span>{result.label}</span>
                 </CommandItem>
               ))}
@@ -111,18 +133,60 @@ function QuestionBlock(props: QuestionBlockProps) {
         )}
 
         {props.kind === "search" && !!props.selectedItems?.length && (
-          <div className="flex flex-wrap gap-2">
+          <div
+            ref={selectedItemsScrollRef}
+            className="max-h-96 overflow-y-hidden pr-1 hover:overflow-y-auto focus-within:overflow-y-auto"
+          >
+            <div className="flex flex-wrap gap-3">
             {props.selectedItems.map((item) => (
-              <Badge key={item.id}>
-                {item.label}
-                {props.onRemoveSelectedItem && (
-                  <X
-                    className="cursor-pointer"
-                    onClick={() => props.onRemoveSelectedItem?.(item.id)}
+              item.imageUrl ? (
+                <div
+                  key={item.id}
+                  className="group relative w-40 animate-in fade-in duration-300 overflow-hidden rounded-xl border border-border bg-card"
+                >
+                  <img
+                    src={item.imageUrl}
+                    alt={item.label}
+                    className="h-28 w-full object-cover transition-opacity duration-300 group-hover:opacity-40"
                   />
-                )}
-              </Badge>
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+                    <p className="line-clamp-2 text-sm font-semibold text-black drop-shadow-sm">{item.label}</p>
+                    {item.subtitle && (
+                      <p className="line-clamp-2 text-xs text-black/90 drop-shadow-sm">{item.subtitle}</p>
+                    )}
+                  </div>
+                  {props.onRemoveSelectedItem && (
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
+                      onClick={() => props.onRemoveSelectedItem?.(item.id)}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div
+                  key={item.id}
+                  className="group relative flex h-28 w-40 animate-in fade-in flex-col items-center justify-center gap-1 rounded-xl border border-border/60 bg-zinc-900 px-2 py-2 text-center duration-300 dark:bg-zinc-950"
+                >
+                  <p className="line-clamp-3 text-sm font-medium text-zinc-50">{item.label}</p>
+                  {item.subtitle && (
+                    <p className="line-clamp-2 text-xs text-zinc-300">{item.subtitle}</p>
+                  )}
+                  {props.onRemoveSelectedItem && (
+                    <button
+                      type="button"
+                      className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
+                      onClick={() => props.onRemoveSelectedItem?.(item.id)}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+              )
             ))}
+            </div>
           </div>
         )}
 

@@ -1,6 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Anthropic from "@anthropic-ai/sdk";
 
+type CurrTrack =
+    | [string, string[]]
+    | { name: string; artists: string[]; imageUrl?: string }
+
+function formatCurrTrack(t: CurrTrack): string {
+    if (Array.isArray(t)) {
+        return `${t[0]} by ${t[1].join(", ")}`
+    }
+    return `${t.name} by ${t.artists.join(", ")}`
+}
+
 interface handleClaude {
     baseline: {
         favGenres: string[],
@@ -12,7 +23,7 @@ interface handleClaude {
     
     currEmotContext: {
         currRant: string,
-        currTracks: [string,string[]][],
+        currTracks: CurrTrack[],
         emotions: string[]
     };
 }
@@ -58,7 +69,7 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         Their current emotions: ${currEmotContext.emotions.join(", ")}
 
-        Songs they’re listening to recently: ${currEmotContext.currTracks.map(([title, artists]) => `${title} by ${artists.join(", ")}`).join(", ")}
+        Songs they’re listening to recently: ${currEmotContext.currTracks.map((t) => formatCurrTrack(t)).join(", ")}
 
 
         Specific Task Instructions:

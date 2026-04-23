@@ -90,8 +90,15 @@ function CheckIn({setView}: CheckInProps) {
         return data
     }
 
+    type CheckInTrack = {
+        id: string
+        name: string
+        artists: string[]
+        imageUrl: string
+    }
+
     const [searchTermTrack, setSearchTermTrack] = useState<string>("")
-    const [spotifyTracks, setSpotifyTracks] = useState<[string, string[]][]>([])
+    const [spotifyTracks, setSpotifyTracks] = useState<CheckInTrack[]>([])
 
     type SpotifyTrack = {
         album: {
@@ -100,6 +107,7 @@ function CheckIn({setView}: CheckInProps) {
           external_urls: { spotify: string }
           href: string
           id: string
+          images: { height: number; url: string; width: number }[]
         }
         artists: { id: string, name: string }[]
         disc_number: number
@@ -125,20 +133,16 @@ function CheckIn({setView}: CheckInProps) {
         }
         const fetchTracks = async () => {
             const results = await searchTracks(searchTermTrack)
-            const uniqueTracks = await results.tracks.items.filter(
+            const uniqueTracks = results.tracks.items.filter(
                 (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
                     index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
             )
-            const tracks: [string, string[]][] = []
-            // console.log("yo", uniqueTracks)
-            uniqueTracks.forEach((track : SpotifyTrack) => {
-                const trackName = track.name
-                // console.log("name", trackName)
-                const trackArtists: string[] = []
-                track.artists.forEach(artist => trackArtists.push(artist.name))
-                // console.log('artists', trackArtists)
-                tracks.push([trackName, trackArtists])
-            })
+            const tracks: CheckInTrack[] = uniqueTracks.map((track: SpotifyTrack) => ({
+                id: track.id,
+                name: track.name,
+                artists: track.artists.map((artist) => artist.name),
+                imageUrl: track.album.images?.[0]?.url ?? "",
+            }))
             // console.log('list of tracks', tracks)
             setSpotifyTracks(tracks)
             // // console.log("hi", artistNames)
@@ -155,16 +159,16 @@ function CheckIn({setView}: CheckInProps) {
         // }
     }, [searchTermTrack])
 
-    const [listOfTracks, setListOfTracks] = useState<[string, string[]][]>([])
+    const [listOfTracks, setListOfTracks] = useState<CheckInTrack[]>([])
 
-    const handleAddTrack = (track: [string, string[]]) => {
-        if (!listOfTracks.includes(track)){
+    const handleAddTrack = (track: CheckInTrack) => {
+        if (!listOfTracks.some((t) => t.id === track.id)) {
             setListOfTracks([...listOfTracks, track])
         }
     }
 
-    const handleRemoveTrack = (track: [string, string[]]) => {
-        setListOfTracks(listOfTracks.filter(currTrack => currTrack != track))
+    const handleRemoveTrack = (trackId: string) => {
+        setListOfTracks((prev) => prev.filter((t) => t.id !== trackId))
     }
 
     const formatArtists = (artists: string[]) => {
@@ -229,20 +233,17 @@ function CheckIn({setView}: CheckInProps) {
                 onSearchTermChange={setSearchTermTrack}
                 placeholder="Search for a track..."
                 results={spotifyTracks.map((track) => ({
-                    id: `${track[0]}-${track[1].join("-")}`,
-                    label: `${track[0]} by ${formatArtists(track[1])}`,
+                    id: track.id,
+                    label: `${track.name} by ${formatArtists(track.artists)}`,
                     onSelect: () => handleAddTrack(track)
                 }))}
                 selectedItems={listOfTracks.map((track) => ({
-                    id: `${track[0]}-${track[1].join("-")}`,
-                    label: `${track[0]} by ${formatArtists(track[1])}`
+                    id: track.id,
+                    label: track.name,
+                    subtitle: formatArtists(track.artists),
+                    imageUrl: track.imageUrl,
                 }))}
-                onRemoveSelectedItem={(trackId) => {
-                    const track = listOfTracks.find(
-                        (item) => `${item[0]}-${item[1].join("-")}` === trackId
-                    )
-                    if (track) handleRemoveTrack(track)
-                }}
+                onRemoveSelectedItem={handleRemoveTrack}
             />
         )
     }

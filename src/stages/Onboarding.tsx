@@ -9,6 +9,19 @@ interface OnboardingProps {
 }
 
 function Onboarding({setView}: OnboardingProps) {
+    type ArtistOption = {
+        id: string
+        name: string
+        imageUrl: string
+    }
+
+    type TrackOption = {
+        id: string
+        name: string
+        artists: string[]
+        imageUrl: string
+    }
+
     // const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
     // const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
 
@@ -45,16 +58,12 @@ function Onboarding({setView}: OnboardingProps) {
     const [searchTermArtist, setSearchTermArtist] = useState<string>("")
 
     type SpotifyArtist = {
-        external_urls: { spotify : string}
-        href: string
         id: string
-        images: {height: number, url: string, width: number}
+        images: {height: number, url: string, width: number}[]
         name: string
-        type: string
-        uri: string
     }
 
-    const [spotifyArtists, setSpotifyArtists] = useState<[string, {height: number, url: string, width: number}][]>([])
+    const [spotifyArtists, setSpotifyArtists] = useState<ArtistOption[]>([])
 
     useEffect(() => {
         let isActive = true
@@ -67,10 +76,11 @@ function Onboarding({setView}: OnboardingProps) {
         const timer = setTimeout(() => {
             const fetchArtists = async () => {
                 const results = await searchArtists(searchTermArtist)
-                const artists = results.artists.items.map((artist : SpotifyArtist) => [artist.name, artist.images])
-                // console.log("hi", artistNames)
-                // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
-                // console.log("hi", results.artists.items)
+                const artists: ArtistOption[] = results.artists.items.map((artist : SpotifyArtist) => ({
+                    id: artist.id,
+                    name: artist.name,
+                    imageUrl: artist.images?.[0]?.url ?? ""
+                }))
                 if (isActive) {
                     setSpotifyArtists(artists)
                 }
@@ -104,7 +114,7 @@ function Onboarding({setView}: OnboardingProps) {
     }
 
     const [searchTermTrack, setSearchTermTrack] = useState<string>("")
-    const [spotifyTracks, setSpotifyTracks] = useState<[string, string[]][]>([])
+    const [spotifyTracks, setSpotifyTracks] = useState<TrackOption[]>([])
 
     type SpotifyTrack = {
         album: {
@@ -113,6 +123,7 @@ function Onboarding({setView}: OnboardingProps) {
           external_urls: { spotify: string }
           href: string
           id: string
+          images: {height: number, url: string, width: number}[]
         }
         artists: { id: string, name: string }[]
         disc_number: number
@@ -145,24 +156,16 @@ function Onboarding({setView}: OnboardingProps) {
                     (track: SpotifyTrack, index: number, self: SpotifyTrack[]) => 
                         index === self.findIndex(t => t.external_ids.isrc === track.external_ids.isrc)
                 )
-                const tracks: [string, string[]][] = []
-                console.log("yo", uniqueTracks)
+                const tracks: TrackOption[] = []
                 uniqueTracks.forEach((track : SpotifyTrack) => {
-                    const trackName = track.name
-                    // console.log("name", trackName)
-                    const trackArtists: string[] = []
-                    track.artists.forEach(artist => trackArtists.push(artist.name))
-                    // console.log('artists', trackArtists)
-                    tracks.push([trackName, trackArtists])
+                    tracks.push({
+                        id: track.id,
+                        name: track.name,
+                        artists: track.artists.map(artist => artist.name),
+                        imageUrl: track.album.images?.[0]?.url ?? ""
+                    })
                 })
-                // console.log('list of tracks', tracks)
                 setSpotifyTracks(tracks)
-                // // console.log("hi", artistNames)
-                // // artistObj.map((artist<SpotifyArtist>) => currArr.append(artist.name))
-                // // console.log("hi", results.artists.items)
-                // if (isActive) {
-                //     setSpotifyArtists(tracks)
-                // }
             }
             fetchTracks()
         }, 500)
@@ -215,22 +218,22 @@ function Onboarding({setView}: OnboardingProps) {
         "Taking a walk"
     ]
 
-    const [listOfArtists, setListOfArtists] = useState<string[]>([])
-    const [listOfTracks, setListOfTracks] = useState<[string, string[]][]>([])
+    const [listOfArtists, setListOfArtists] = useState<ArtistOption[]>([])
+    const [listOfTracks, setListOfTracks] = useState<TrackOption[]>([])
     const [listGenres, setListGenres] = useState<string[]>([])
     const [listContexts, setListContexts] = useState<string[]>([])
     const [additionalContext, setAdditionalContext] = useState<string>("")
     const [showWelcomeScreen, setShowWelcomeScreen] = useState(true)
     const [currentQuestion, setCurrentQuestion] = useState(0)
 
-    const handleAddArtist = (artist: string) => {
-        if (!listOfArtists.includes(artist)){
+    const handleAddArtist = (artist: ArtistOption) => {
+        if (!listOfArtists.some(currArtist => currArtist.id === artist.id)){
             setListOfArtists([...listOfArtists, artist])
         }
     }
 
-    const handleRemoveArtist = (artist: string) => {
-        setListOfArtists(listOfArtists.filter(currArtist => currArtist != artist))
+    const handleRemoveArtist = (artistId: string) => {
+        setListOfArtists(listOfArtists.filter(currArtist => currArtist.id !== artistId))
     }
 
     const handleAddGenre = (genre: string) => {
@@ -242,14 +245,14 @@ function Onboarding({setView}: OnboardingProps) {
         }
     }
 
-    const handleAddTrack = (track: [string, string[]]) => {
-        if (!listOfTracks.includes(track)){
+    const handleAddTrack = (track: TrackOption) => {
+        if (!listOfTracks.some(currTrack => currTrack.id === track.id)){
             setListOfTracks([...listOfTracks, track])
         }
     }
 
-    const handleRemoveTrack = (track: [string, string[]]) => {
-        setListOfTracks(listOfTracks.filter(currTrack => currTrack != track))
+    const handleRemoveTrack = (trackId: string) => {
+        setListOfTracks(listOfTracks.filter(currTrack => currTrack.id !== trackId))
     }
 
     const handleAddContext = (context: string) => {
@@ -276,8 +279,8 @@ function Onboarding({setView}: OnboardingProps) {
 
     const handleBaseline = () => {
         const baseline = {
-            favArtists: listOfArtists,
-            favTracks: listOfTracks,
+            favArtists: listOfArtists.map(artist => artist.name),
+            favTracks: listOfTracks.map(track => [track.name, track.artists] as [string, string[]]),
             favGenres: listGenres,
             personalContexts: listContexts,
             addContext: additionalContext
@@ -333,13 +336,14 @@ function Onboarding({setView}: OnboardingProps) {
                     onSearchTermChange={setSearchTermArtist}
                     placeholder="Search for an artist..."
                     results={spotifyArtists.map((artist) => ({
-                        id: artist[0],
-                        label: artist[0],
-                        onSelect: () => handleAddArtist(artist[0])
+                        id: artist.id,
+                        label: artist.name,
+                        onSelect: () => handleAddArtist(artist)
                     }))}
                     selectedItems={listOfArtists.map((artist) => ({
-                        id: artist,
-                        label: artist
+                        id: artist.id,
+                        label: artist.name,
+                        imageUrl: artist.imageUrl
                     }))}
                     onRemoveSelectedItem={handleRemoveArtist}
                 />
@@ -355,20 +359,17 @@ function Onboarding({setView}: OnboardingProps) {
                     onSearchTermChange={setSearchTermTrack}
                     placeholder="Search for a track..."
                     results={spotifyTracks.map((track) => ({
-                        id: `${track[0]}-${track[1].join("-")}`,
-                        label: `${track[0]} by ${formatArtists(track[1])}`,
+                        id: track.id,
+                        label: `${track.name} by ${formatArtists(track.artists)}`,
                         onSelect: () => handleAddTrack(track)
                     }))}
                     selectedItems={listOfTracks.map((track) => ({
-                        id: `${track[0]}-${track[1].join("-")}`,
-                        label: `${track[0]} by ${formatArtists(track[1])}`
+                        id: track.id,
+                        label: track.name,
+                        subtitle: formatArtists(track.artists),
+                        imageUrl: track.imageUrl
                     }))}
-                    onRemoveSelectedItem={(trackId) => {
-                        const track = listOfTracks.find(
-                            (item) => `${item[0]}-${item[1].join("-")}` === trackId
-                        )
-                        if (track) handleRemoveTrack(track)
-                    }}
+                    onRemoveSelectedItem={handleRemoveTrack}
                 />
             )
         }

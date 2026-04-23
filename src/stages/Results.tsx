@@ -29,7 +29,7 @@ function Results() {
   const storedEmotContext = localStorage.getItem('currEmotContext')
   const currEmotContext = storedEmotContext ?  JSON.parse(storedEmotContext) as {
     currRant: string,
-    currTracks: [string,string[]][],
+    currTracks: ([string, string[]] | { name: string; artists: string[]; imageUrl?: string })[],
     emotions: string[]
   } : null
 
