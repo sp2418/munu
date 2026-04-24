@@ -75,11 +75,14 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         Specific Task Instructions:
 
         1. Suggest how the current music they’re listening to may be affecting their emotional state. Remember to be warm and supportive. Use phrases like “may be affecting” instead of “is causing”.
-        2. Have an explanation on what the iso principle is and how you are using the principle to offer song suggestions to help them emotionally process what they are going through. Explain it in warm, accessible language as if you’re speaking directly to the user.
-        3. Then, suggest 10 songs that can help them gradually shift to a desired state that helps them emotionally process what they are going through with the use of the iso-principle. Make sure the song suggestions align with their music taste. 
-        4. Offer explanations on how those suggested songs can help them process. 
-        5. Lastly, suggest 10 other songs that can represent them once they’re fully in their desired state after emotionally processing what they’re going through. The desired state represents a future state where the user has completed emotionally processing what they are going through and hopefully feels more positively about their circumstances in general. Make sure the song suggestions align with their music taste. Also, offer explanations on how each of these songs represents the users desired state. 
-
+        2. Have an explanation on what the iso principle is and how you are using the principle to offer song suggestions to help them emotionally process what they are going through. Explain it in warm, accessible language as if you’re speaking directly to the user. But also keep it short and sweet.
+        3. Suggest 20 songs that represent the user's complete emotional journey using the ISO principle. 
+           The first 1-4 songs should meet them exactly where they are emotionally right now. 
+           The middle songs should gradually shift in energy, tempo, and emotional tone. 
+           The final 1-4 songs should represent their desired state. The desired state is one of emotional regulation and groundedness — not necessarily happiness, but a sense of having moved through the emotions and feeling more present and capable.
+           Think of it as one continuous playlist that takes them from the bottom of the mountain to the peak.
+           Make sure all song suggestions align with their music taste. Make sure every suggested song is real and verifiable on Spotify.
+       
         Important guidelines that apply to all song suggestions:
         When suggesting songs, prioritize deeper cuts, album tracks, and lesser known songs within the artist's discography over their biggest hits or most streamed songs. 
         Avoid suggesting songs that are extremely well known or overplayed. 
@@ -87,16 +90,13 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         Do not suggest more than 2 songs from the same artist across the entire list. 
         Prioritize a diverse range of artists that align with the user's taste profile but also introduce them to new artists they may not have heard of before. 
         If suggesting a well known artist, choose a lesser known collaborator or feature that might expose the user to a new artist.
-        Make sure every suggested song is real and verifiable on Spotify.
 
         Return a JSON with these specific fields:
         - insight: contains output for Step 1
         - isoExplanation: contains output for Step 2
-        - gradualShiftSongs: contains output for Steps 3 and 4
-            - Example of format: "gradualShiftSongs”: [{"title": "...", "artist": "...", "explanation": "..."}]
-        - desiredStateSongs: contains output for Step 5
-            - Example of format: "desiredStateSongs": [{"title": "...", "artist": "...", "explanation": "..."}]
-
+        - journeySongs: contains output for Step 3
+            - Example of format: "journeySongs": [{"title": "...", "artist": "...", "explanation": "..."}]
+        
         Important: the title and artist fields must contain ONLY the song title and artist name respectively. 
         No explanations, alternatives, parentheses, special characters, bullet points, or additional text in these fields.
         All reasoning and explanations belong only in the explanation field.
