@@ -76,21 +76,25 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         1. Suggest how the current music they’re listening to may be affecting their emotional state. Remember to be warm and supportive. Use phrases like “may be affecting” instead of “is causing”.
         2. Have an explanation on what the iso principle is and how you are using the principle to offer song suggestions to help them emotionally process what they are going through. Explain it in warm, accessible language as if you’re speaking directly to the user. But also keep it short and sweet.
-        3. Suggest 20 songs that represent the user's complete emotional journey using the ISO principle. 
-           The first 1-4 songs should meet them exactly where they are emotionally right now. 
-           The middle songs should gradually shift in energy, tempo, and emotional tone. 
-           The final 1-4 songs should represent their desired state. The desired state is one of emotional regulation and groundedness — not necessarily happiness, but a sense of having moved through the emotions and feeling more present and capable.
-           Think of it as one continuous playlist that takes them from the bottom of the mountain to the peak.
-           Make sure all song suggestions align with their music taste. Make sure every suggested song is real and verifiable on Spotify.
-       
+        3. Suggest 20 songs that represent the user's complete emotional journey using the ISO principle. Think of it as climbing a mountain:
+
+            - Songs 1-4 (Base of the mountain): Match the user's current emotional state exactly. These should feel heavy, reflective, or melancholic if that's where they are.
+
+            - Songs 5-12 (Climbing): Gradually increase in energy, tempo, and emotional brightness. Each song should feel slightly more hopeful and alive than the last. The shift should be subtle but consistent.
+
+            - Songs 13-16 (Near the peak): Noticeably more energized and uplifting. The user should feel momentum and forward movement.
+
+            - Songs 17-20 (The peak): Celebratory, empowered, and vibrant. These songs should feel like arrival — still authentic to their taste but clearly representing a brighter emotional state.
+
+            The energy arc must be clear and intentional. Do not let the playlist stay in a low energy space. The whole point is movement.
+
         Important guidelines that apply to all song suggestions:
         When suggesting songs, prioritize deeper cuts, album tracks, and lesser known songs within the artist's discography over their biggest hits or most streamed songs. 
         Avoid suggesting songs that are extremely well known or overplayed. 
         The goal is music discovery — expose the user to songs they likely haven't heard before but that align closely with their taste. It is okay to suggest songs from well known artists, but choose their more obscure or underappreciated tracks rather than their chart hits. 
         Do not suggest more than 2 songs from the same artist across the entire list. 
         Prioritize a diverse range of artists that align with the user's taste profile but also introduce them to new artists they may not have heard of before. 
-        If suggesting a well known artist, choose a lesser known collaborator or feature that might expose the user to a new artist.
-
+        
         Return a JSON with these specific fields:
         - insight: contains output for Step 1
         - isoExplanation: contains output for Step 2
