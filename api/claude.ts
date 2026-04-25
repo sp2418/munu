@@ -92,6 +92,10 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         When suggesting songs, prioritize deeper cuts and lesser known tracks over the biggest hits, but ONLY if you are completely certain the song exists. 
         If you are not 100% confident a specific deep cut exists, choose a more well known song from that artist instead. Accuracy is more important than obscurity.
         Do not suggest songs you are uncertain about. It is better to suggest a well known song that definitely exists than a niche song that may not.
+        The song suggestions must feel stylistically consistent with the user's favorite artists and tracks listed above. Do not suggest songs from genres or artists that feel disconnected from their taste profile.
+        Prioritize artists from or similar to their favorite artists list.
+        The peak songs should still feel like the user's authentic taste — just at a higher energy level. 
+        Do not introduce completely new genres at the peak.
        
         Return a JSON with these specific fields:
         - insight: contains output for Step 1
