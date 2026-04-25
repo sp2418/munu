@@ -94,12 +94,21 @@ function Results() {
         str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
       console.log("number of songs", songs.length)
+      const token = localStorage.getItem('spotifyToken')
       for (const song of songs) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+
         const title = song.title
         const artist = song.artist
         const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
 
-        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${cleanArtist}`)
+        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${cleanArtist}&token=${token}`)
+
+        if (response.status === 429){
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          continue
+        }
+
         const result = await response.json()
         const items = result.tracks?.items
 

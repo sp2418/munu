@@ -51,7 +51,8 @@ function Onboarding({setView}: OnboardingProps) {
 
     const searchArtists = async (searchTermArtist: string) => {
         // console.log(`/spotify/v1/search?q=${searchTermArtist}&type=artist`)
-        const response = await fetch(`/api/spotify-search?q=${searchTermArtist}&type=artist`)
+        const token = localStorage.getItem('spotifyToken')
+        const response = await fetch(`/api/spotify-search?q=${searchTermArtist}&type=artist&token=${token}`)
         const data = await response.json()
         return data
     }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 import './App.css'
 import Onboarding from './stages/Onboarding'
@@ -26,6 +26,16 @@ function App() {
   }
   
   const [currentView, setCurrentView] = useState<string>(initView)
+
+  useEffect(() => {
+    const getSpotifyToken = async () => {
+      const response = await fetch('/api/spotify-token')
+      const data = await response.json()
+      localStorage.setItem('spotifyToken', data.access_token)
+    }
+
+    getSpotifyToken()
+  }, [])
 
   return (
     <div>

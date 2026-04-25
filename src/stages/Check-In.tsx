@@ -86,7 +86,8 @@ function CheckIn({setView}: CheckInProps) {
         // })
         // // console.log(response.status)
         // const data = await response.json()
-        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track`)
+        const token = localStorage.getItem('spotifyToken')
+        const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track&token=${token}`)
         const data = await response.json()
         return data
     }
