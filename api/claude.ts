@@ -89,12 +89,10 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
             The energy arc must be clear and intentional. Do not let the playlist stay in a low energy space. The whole point is movement.
 
         Important guidelines that apply to all song suggestions:
-        When suggesting songs, prioritize deeper cuts, album tracks, and lesser known songs within the artist's discography over their biggest hits or most streamed songs. 
-        Avoid suggesting songs that are extremely well known or overplayed. 
-        The goal is music discovery — expose the user to songs they likely haven't heard before but that align closely with their taste. It is okay to suggest songs from well known artists, but choose their more obscure or underappreciated tracks rather than their chart hits. 
-        Do not suggest more than 2 songs from the same artist across the entire list. 
-        Prioritize a diverse range of artists that align with the user's taste profile but also introduce them to new artists they may not have heard of before. 
-        
+        When suggesting songs, prioritize deeper cuts and lesser known tracks over the biggest hits, but ONLY if you are completely certain the song exists. 
+        If you are not 100% confident a specific deep cut exists, choose a more well known song from that artist instead. Accuracy is more important than obscurity.
+        Do not suggest songs you are uncertain about. It is better to suggest a well known song that definitely exists than a niche song that may not.
+       
         Return a JSON with these specific fields:
         - insight: contains output for Step 1
         - isoExplanation: contains output for Step 2
