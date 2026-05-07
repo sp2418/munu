@@ -1,9 +1,21 @@
 import QuestionBlock from "../components/QuestionBlock"
 import QuestionStageLayout from "../components/QuestionStageLayout"
 import { Button } from "../components/ui/button"
+import { cn } from "../lib/utils"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useLayoutEffect, useRef } from "react"
+
+/** Pause before the first sentence begins to fade in. */
+const WELCOME_INTRO_STILLNESS_MS = 500
+/** Quiet beat after a sentence has finished fading, before the next block animates. */
+const WELCOME_PAUSE_BETWEEN_MS = 700
+/** After the prep headline line finishes fading, pause before the second line fades in. */
+const PREP_STAGGER_LINE_PAUSE_MS = 550
+/** Prep screen fades out before the questionnaire mounts (motion only). */
+const PREP_SCREEN_EXIT_FADE_MS = 500
+/** Opacity transition length for each sentence (keep in sync with `motion-safe:duration-[900ms]` below). */
+const WELCOME_LINE_FADE_MS = 900
 
 interface OnboardingProps {
     setView: (view: string) => void;
@@ -161,6 +173,7 @@ function Onboarding({setView}: OnboardingProps) {
                 )
                 const tracks: TrackOption[] = []
                 uniqueTracks.forEach((track : SpotifyTrack) => {
+                    console.log(track)
                     tracks.push({
                         id: track.id,
                         name: track.name,
@@ -227,7 +240,190 @@ function Onboarding({setView}: OnboardingProps) {
     const [listContexts, setListContexts] = useState<string[]>([])
     const [additionalContext, setAdditionalContext] = useState<string>("")
     const [showWelcomeScreen, setShowWelcomeScreen] = useState(true)
+    const [showPrepScreen, setShowPrepScreen] = useState(false)
+    /** After the last taste question, before saving baseline and opening check-in. */
+    const [showMusicToMoodBridgeScreen, setShowMusicToMoodBridgeScreen] = useState(false)
     const [currentQuestion, setCurrentQuestion] = useState(0)
+
+    /** True while prep is fading out toward the questionnaire. */
+    const [prepIsExitingToQuestions, setPrepIsExitingToQuestions] = useState(false)
+    /** Controls opacity fade-in when entering QuestionStageLayout after prep (stays true while moving between questions). */
+    const [questionStageOpacityVisible, setQuestionStageOpacityVisible] = useState(true)
+    const prepExitToQuestionsTimeoutRef = useRef<number>(0)
+
+    const [revealWelcomeFirst, setRevealWelcomeFirst] = useState(false)
+    const [revealWelcomeSecond, setRevealWelcomeSecond] = useState(false)
+    const [revealWelcomeCta, setRevealWelcomeCta] = useState(false)
+
+    useEffect(() => {
+        if (!showWelcomeScreen) {
+            setRevealWelcomeFirst(false)
+            setRevealWelcomeSecond(false)
+            setRevealWelcomeCta(false)
+            return
+        }
+
+        const reduced =
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+        if (reduced) {
+            queueMicrotask(() => {
+                setRevealWelcomeFirst(true)
+                setRevealWelcomeSecond(true)
+                setRevealWelcomeCta(true)
+            })
+            return undefined
+        }
+
+        const intro = WELCOME_INTRO_STILLNESS_MS
+        const fade = WELCOME_LINE_FADE_MS
+        const pause = WELCOME_PAUSE_BETWEEN_MS
+
+        const afterFirst = intro + fade + pause
+        const afterSecond = afterFirst + fade + pause
+
+        const ids: ReturnType<typeof setTimeout>[] = [
+            window.setTimeout(() => setRevealWelcomeFirst(true), intro),
+            window.setTimeout(() => setRevealWelcomeSecond(true), afterFirst),
+            window.setTimeout(() => setRevealWelcomeCta(true), afterSecond),
+        ]
+
+        return () => {
+            for (const id of ids) {
+                window.clearTimeout(id)
+            }
+        }
+    }, [showWelcomeScreen])
+
+    const [revealPrepHeadline, setRevealPrepHeadline] = useState(false)
+    const [revealPrepBody, setRevealPrepBody] = useState(false)
+    const [revealPrepCta, setRevealPrepCta] = useState(false)
+
+    useEffect(() => {
+        if (!showPrepScreen) {
+            setRevealPrepHeadline(false)
+            setRevealPrepBody(false)
+            setRevealPrepCta(false)
+            return
+        }
+
+        const reduced =
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+        if (reduced) {
+            queueMicrotask(() => {
+                setRevealPrepHeadline(true)
+                setRevealPrepBody(true)
+                setRevealPrepCta(true)
+            })
+            return undefined
+        }
+
+        const intro = WELCOME_INTRO_STILLNESS_MS
+        const fade = WELCOME_LINE_FADE_MS
+        const lineGap = PREP_STAGGER_LINE_PAUSE_MS
+        const beforeCta = WELCOME_PAUSE_BETWEEN_MS
+
+        const headlineAt = intro
+        const bodyAt = intro + fade + lineGap
+        const ctaAt = bodyAt + fade + beforeCta
+
+        const ids: ReturnType<typeof setTimeout>[] = [
+            window.setTimeout(() => setRevealPrepHeadline(true), headlineAt),
+            window.setTimeout(() => setRevealPrepBody(true), bodyAt),
+            window.setTimeout(() => setRevealPrepCta(true), ctaAt),
+        ]
+
+        return () => {
+            for (const id of ids) {
+                window.clearTimeout(id)
+            }
+        }
+    }, [showPrepScreen])
+
+    const [revealBridgeHeadline, setRevealBridgeHeadline] = useState(false)
+    const [revealBridgeBody, setRevealBridgeBody] = useState(false)
+    const [revealBridgeCta, setRevealBridgeCta] = useState(false)
+
+    useEffect(() => {
+        if (!showMusicToMoodBridgeScreen) {
+            setRevealBridgeHeadline(false)
+            setRevealBridgeBody(false)
+            setRevealBridgeCta(false)
+            return
+        }
+
+        const reduced =
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+        if (reduced) {
+            queueMicrotask(() => {
+                setRevealBridgeHeadline(true)
+                setRevealBridgeBody(true)
+                setRevealBridgeCta(true)
+            })
+            return undefined
+        }
+
+        const intro = WELCOME_INTRO_STILLNESS_MS
+        const fade = WELCOME_LINE_FADE_MS
+        const lineGap = PREP_STAGGER_LINE_PAUSE_MS
+        const beforeCta = WELCOME_PAUSE_BETWEEN_MS
+
+        const headlineAt = intro
+        const bodyAt = intro + fade + lineGap
+        const ctaAt = bodyAt + fade + beforeCta
+
+        const ids: ReturnType<typeof setTimeout>[] = [
+            window.setTimeout(() => setRevealBridgeHeadline(true), headlineAt),
+            window.setTimeout(() => setRevealBridgeBody(true), bodyAt),
+            window.setTimeout(() => setRevealBridgeCta(true), ctaAt),
+        ]
+
+        return () => {
+            for (const id of ids) {
+                window.clearTimeout(id)
+            }
+        }
+    }, [showMusicToMoodBridgeScreen])
+
+    useEffect(() => {
+        return () => {
+            if (prepExitToQuestionsTimeoutRef.current !== 0) {
+                window.clearTimeout(prepExitToQuestionsTimeoutRef.current)
+            }
+        }
+    }, [])
+
+    useLayoutEffect(() => {
+        if (showWelcomeScreen || showPrepScreen) return
+        if (questionStageOpacityVisible) return
+
+        const reduced =
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+        if (reduced) {
+            queueMicrotask(() => setQuestionStageOpacityVisible(true))
+            return undefined
+        }
+
+        let outerRaf = 0
+        let innerRaf = 0
+        outerRaf = requestAnimationFrame(() => {
+            innerRaf = requestAnimationFrame(() => setQuestionStageOpacityVisible(true))
+        })
+
+        return () => {
+            cancelAnimationFrame(outerRaf)
+            cancelAnimationFrame(innerRaf)
+        }
+    }, [showWelcomeScreen, showPrepScreen, questionStageOpacityVisible])
+
+    const welcomeFadeClass = (revealed: boolean) =>
+        cn(
+            "text-pretty text-[0.9375rem] leading-relaxed transition-opacity ease-out motion-reduce:transition-none sm:text-base",
+            revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
+        )
 
     const handleAddArtist = (artist: ArtistOption) => {
         if (!listOfArtists.some(currArtist => currArtist.id === artist.id)){
@@ -282,8 +478,12 @@ function Onboarding({setView}: OnboardingProps) {
 
     const handleBaseline = () => {
         const baseline = {
-            favArtists: listOfArtists.map(artist => artist.name),
-            favTracks: listOfTracks.map(track => [track.name, track.artists] as [string, string[]]),
+            favArtists: listOfArtists.map((artist) => ({
+                id: artist.id,
+                name: artist.name,
+                imageUrl: artist.imageUrl,
+            })),
+            favTracks: listOfTracks.map(track => [track.name, track.artists, track.id] as [string, string[], string]),
             favGenres: listGenres,
             personalContexts: listContexts,
             addContext: additionalContext
@@ -298,11 +498,31 @@ function Onboarding({setView}: OnboardingProps) {
     const handleNext = () => {
         if (showWelcomeScreen) {
             setShowWelcomeScreen(false)
+            setShowPrepScreen(true)
+            return
+        }
+
+        if (showPrepScreen) {
+            const reduced =
+                typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+            if (reduced) {
+                setQuestionStageOpacityVisible(true)
+                setShowPrepScreen(false)
+                return
+            }
+
+            setPrepIsExitingToQuestions(true)
+            prepExitToQuestionsTimeoutRef.current = window.setTimeout(() => {
+                prepExitToQuestionsTimeoutRef.current = 0
+                setShowPrepScreen(false)
+                setPrepIsExitingToQuestions(false)
+                setQuestionStageOpacityVisible(false)
+            }, PREP_SCREEN_EXIT_FADE_MS)
             return
         }
 
         if (isLastQuestion) {
-            handleBaseline()
+            setShowMusicToMoodBridgeScreen(true)
             return
         }
         setCurrentQuestion(prev => prev + 1)
@@ -310,8 +530,23 @@ function Onboarding({setView}: OnboardingProps) {
 
     const handleBack = () => {
         if (showWelcomeScreen) return
-        if (currentQuestion === 0) {
+        if (showPrepScreen) {
+            if (prepExitToQuestionsTimeoutRef.current !== 0) {
+                window.clearTimeout(prepExitToQuestionsTimeoutRef.current)
+                prepExitToQuestionsTimeoutRef.current = 0
+            }
+            setPrepIsExitingToQuestions(false)
+            setShowPrepScreen(false)
             setShowWelcomeScreen(true)
+            return
+        }
+        if (showMusicToMoodBridgeScreen) {
+            setShowMusicToMoodBridgeScreen(false)
+            return
+        }
+        if (currentQuestion === 0) {
+            setQuestionStageOpacityVisible(true)
+            setShowPrepScreen(true)
             return
         }
         setCurrentQuestion(prev => Math.max(prev - 1, 0))
@@ -416,11 +651,36 @@ function Onboarding({setView}: OnboardingProps) {
         return (
             <div className="flex min-h-svh items-center justify-center px-6 py-10">
                 <div className="w-full max-w-3xl">
-                    <div key="onboarding-welcome" className="animate-in fade-in duration-500 space-y-4 text-center">
-                        <p>Hey! It's great to meet you :)</p>
-                        <p className="text-muted-foreground">We wanted to ask you a few questions before we get started.</p>
-                        <div className="pt-2">
-                            <Button type="button" onClick={handleNext}>Get Started</Button>
+                    <div key="onboarding-welcome" className="text-center">
+                        <div
+                            className="mx-auto flex w-full max-w-prose flex-col gap-y-16 text-center sm:gap-y-24"
+                            aria-live="polite"
+                        >
+                            <div className={welcomeFadeClass(revealWelcomeFirst)}>
+                                <div className="flex flex-col gap-y-2">
+                                    <div>Hi there! Welcome to Musical Nutrients, an app that guides you</div>
+                                    <div>through your feelings with music that feels like yours.</div>
+                                </div>
+                            </div>
+                            <div className={welcomeFadeClass(revealWelcomeSecond)}>
+                                <div className="flex flex-col gap-y-2">
+                                    <div>We’ll get to know your music taste, ask how you’re feeling today,</div>
+                                    <div>and put together a playlist that helps you find your way through.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div
+                            className={cn(
+                                "mt-10 sm:mt-12",
+                                "transition-opacity ease-out motion-reduce:transition-none",
+                                revealWelcomeCta
+                                    ? "opacity-100 motion-safe:duration-[900ms]"
+                                    : "pointer-events-none opacity-0 motion-safe:duration-0",
+                            )}
+                        >
+                            <Button type="button" onClick={handleNext}>
+                                Get Started
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -428,18 +688,134 @@ function Onboarding({setView}: OnboardingProps) {
         )
     }
 
+    if (showPrepScreen) {
+        return (
+            <div
+                className={cn(
+                    "flex min-h-svh items-center justify-center px-6 py-10",
+                    "transition-opacity ease-out motion-reduce:transition-none",
+                    // Keep in sync with PREP_SCREEN_EXIT_FADE_MS.
+                    "motion-safe:duration-500",
+                    prepIsExitingToQuestions &&
+                        "pointer-events-none opacity-0 motion-reduce:pointer-events-auto motion-reduce:opacity-100",
+                )}
+            >
+                <div className="w-full max-w-3xl">
+                    <div key="onboarding-prep" className="min-h-[520px] space-y-4">
+                        <div className="flex justify-end">
+                            <p className="invisible text-sm text-muted-foreground select-none" aria-hidden>
+                                Question 1 of {totalQuestions}
+                            </p>
+                        </div>
+                        <div className="flex min-h-[420px] items-center justify-center">
+                            <div
+                                className="mx-auto w-full max-w-prose text-center"
+                                aria-live="polite"
+                            >
+                                <div className="flex flex-col gap-y-16 sm:gap-y-24">
+                                    <div className="flex flex-col gap-y-2">
+                                        <p className={cn("m-0", welcomeFadeClass(revealPrepHeadline))}>
+                                            First, the music.
+                                        </p>
+                                        <p className={cn("m-0", welcomeFadeClass(revealPrepBody))}>
+                                            Tell us a bit about what you listen to, so we can curate something that feels like yours.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        className={cn(
+                            "mt-6 flex items-center justify-between",
+                            "transition-opacity ease-out motion-reduce:transition-none",
+                            revealPrepCta
+                                ? "opacity-100 motion-safe:duration-[900ms]"
+                                : "pointer-events-none opacity-0 motion-safe:duration-0",
+                        )}
+                    >
+                        <Button type="button" variant="outline" onClick={handleBack}>
+                            Back
+                        </Button>
+                        <Button type="button" onClick={handleNext}>
+                            Continue
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (showMusicToMoodBridgeScreen) {
+        return (
+            <div className="flex min-h-svh items-center justify-center px-6 py-10">
+                <div className="w-full max-w-3xl">
+                    <div key="onboarding-bridge" className="min-h-[520px] space-y-4">
+                        <div className="flex justify-end">
+                            <p className="invisible text-sm text-muted-foreground select-none" aria-hidden>
+                                Question {totalQuestions} of {totalQuestions}
+                            </p>
+                        </div>
+                        <div className="flex min-h-[420px] items-center justify-center">
+                            <div
+                                className="mx-auto w-full max-w-prose text-center"
+                                aria-live="polite"
+                            >
+                                <div className="flex flex-col gap-y-16 sm:gap-y-24">
+                                    <div className="flex flex-col gap-y-2">
+                                        <p className={cn("m-0", welcomeFadeClass(revealBridgeHeadline))}>
+                                            Now, let's check in with you.
+                                        </p>
+                                        <p className={cn("m-0", welcomeFadeClass(revealBridgeBody))}>
+                                            A few questions about how you're feeling right now, so we can meet you there.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div
+                        className={cn(
+                            "mt-6 flex items-center justify-between",
+                            "transition-opacity ease-out motion-reduce:transition-none",
+                            revealBridgeCta
+                                ? "opacity-100 motion-safe:duration-[900ms]"
+                                : "pointer-events-none opacity-0 motion-safe:duration-0",
+                        )}
+                    >
+                        <Button type="button" variant="outline" onClick={handleBack}>
+                            Back
+                        </Button>
+                        <Button type="button" onClick={handleBaseline}>
+                            Continue
+                        </Button>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
     return (
-        <QuestionStageLayout
-            currentQuestion={currentQuestion + 1}
-            totalQuestions={totalQuestions}
-            onBack={handleBack}
-            onNext={handleNext}
-            isBackDisabled={false}
-            nextLabel={isLastQuestion ? "Done" : "Next"}
-            questionKey={`onboarding-question-${currentQuestion}`}
+        <div
+            className={cn(
+                "transition-opacity ease-out motion-reduce:transition-none",
+                // Question-stage fade-in duration (milliseconds; tune both here if you change timing).
+                "motion-safe:duration-[700ms]",
+                questionStageOpacityVisible ? "opacity-100" : "opacity-0 motion-reduce:opacity-100",
+            )}
         >
-            {renderCurrentQuestion()}
-        </QuestionStageLayout>
+            <QuestionStageLayout
+                currentQuestion={currentQuestion + 1}
+                totalQuestions={totalQuestions}
+                onBack={handleBack}
+                onNext={handleNext}
+                isBackDisabled={false}
+                nextLabel={isLastQuestion ? "Done" : "Next"}
+                questionKey={`onboarding-question-${currentQuestion}`}
+            >
+                {renderCurrentQuestion()}
+            </QuestionStageLayout>
+        </div>
     )
 }
 

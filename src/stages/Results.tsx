@@ -1,12 +1,262 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useLayoutEffect, useId, useRef } from "react"
 
 import {
+  type CarouselApi,
   Carousel,
   CarouselContent,
   CarouselItem,
   CarouselNext,
   CarouselPrevious,
 } from "../components/ui/carousel"
+import { Button } from "../components/ui/button"
+import { cn } from "../lib/utils"
+import {
+  enrichStoredMusicProfilesWithReccoBeats,
+  type CurrEmotContext,
+  type MusicBaseline,
+} from "../lib/reccobeatsEnrich"
+
+const INSIGHT_LOADING_LINES = [
+  "Listening to where you are...",
+  "Reading the music you've been reaching for...",
+  "Sitting with what you shared...",
+  "Noticing the textures in your songs...",
+  "Finding the throughline...",
+  "Putting it into words...",
+] as const
+
+/** Time each line stays fully visible before crossfading to the next. */
+const INSIGHT_LINE_MS = 3000
+/** Fade out / fade in duration (keep in sync with `duration-300` below). */
+const INSIGHT_LINE_FADE_MS = 300
+
+/** Copy stagger on fullscreen insight-loading (mirror Onboarding prep pacing). */
+const INSIGHT_LOADER_INTRO_MS = 500
+const INSIGHT_LOADER_LINE_FADE_MS = 900
+const INSIGHT_LOADER_INTRA_MS = 550
+/** After the second line fades, brief beat before rotating status lines resume focus. */
+const INSIGHT_LOADER_BEFORE_ROTATOR_MS = 450
+
+/** Pause with the loader gone before the first mirror line fades in. */
+const INSIGHT_STILLNESS_MS = 700
+
+/** Offset between starting each staggered fade (mirror + playlist sub-blocks). */
+const MIRROR_STAGGER_STEP_MS = 520
+
+/** Matches insight `<p>` fade (`motion-safe:duration-[1400ms]`); journey lines appear after this. */
+const INSIGHT_BODY_FADE_MS = 1400
+
+/** Pause after journey work ends before showing the playlist CTA button. */
+const PLAYLIST_AFTER_LOADER_MS = 380
+
+/** Slower than native `scroll-behavior: smooth`; playlist fades in after this finishes. */
+const PLAYLIST_SCROLL_DURATION_MS = 2200
+
+/** Matches `scroll-mt-8` on the playlist `<section>`. */
+const PLAYLIST_SCROLL_MARGIN_PX = 32
+
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+function insightLoadingLineFadeClass(revealed: boolean) {
+  return cn(
+    "m-0 text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground transition-opacity ease-out motion-reduce:transition-none sm:text-base",
+    revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
+  )
+}
+
+const JOURNEY_LOADING_LINES = [
+  "Mapping the journey forward...",
+  "Tracing the path from here...",
+  "Matching tempo, valence, and energy to your taste...",
+  "Looking for songs that meet you here...",
+  "Threading the audio features together...",
+  "Pulling previews...",
+] as const
+
+/** Crossfading pulse loader — shared by insight (fullscreen) and journey (below mirror). */
+function RotatingLoadingLines({
+  lines,
+  active,
+}: {
+  lines: readonly string[]
+  active: boolean
+}) {
+  const [lineIndex, setLineIndex] = useState(0)
+  const [fadedIn, setFadedIn] = useState(true)
+
+  useEffect(() => {
+    if (!active) return
+
+    queueMicrotask(() => {
+      setLineIndex(0)
+      setFadedIn(true)
+    })
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      const id = window.setInterval(() => {
+        setLineIndex((i) => (i + 1) % lines.length)
+      }, INSIGHT_LINE_MS)
+      return () => window.clearInterval(id)
+    }
+
+    let cancelled = false
+    let dwellId: ReturnType<typeof setTimeout> | undefined
+    let fadeId: ReturnType<typeof setTimeout> | undefined
+
+    const clearTimers = () => {
+      if (dwellId !== undefined) window.clearTimeout(dwellId)
+      if (fadeId !== undefined) window.clearTimeout(fadeId)
+    }
+
+    /** Full-opacity dwell → fade out → swap line → fade in → wait for fade-in → dwell again */
+    const scheduleCycle = (): void => {
+      dwellId = window.setTimeout(() => {
+        if (cancelled) return
+        setFadedIn(false)
+        fadeId = window.setTimeout(() => {
+          if (cancelled) return
+          setLineIndex((i) => (i + 1) % lines.length)
+          setFadedIn(true)
+          dwellId = window.setTimeout(() => scheduleCycle(), INSIGHT_LINE_FADE_MS + INSIGHT_LINE_MS)
+        }, INSIGHT_LINE_FADE_MS)
+      }, INSIGHT_LINE_MS)
+    }
+
+    scheduleCycle()
+
+    return () => {
+      cancelled = true
+      clearTimers()
+    }
+  }, [active, lines])
+
+  if (!active) return null
+
+  const line = lines[lineIndex]
+  const reducedMotion =
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+  return (
+    <div aria-live="polite" className="mx-auto max-w-lg motion-safe:animate-pulse">
+      <p
+        className={cn(
+          "text-center text-sm text-muted-foreground",
+          !reducedMotion && "transition-opacity duration-300 ease-in-out",
+          !reducedMotion && (fadedIn ? "opacity-100" : "opacity-0"),
+        )}
+      >
+        {line}
+      </p>
+    </div>
+  )
+}
+
+/** Preview bar pinned to bottom of artwork (inside card). */
+function CardPreviewBar({
+  previewUrl,
+  variant,
+}: {
+  previewUrl: string | null | undefined
+  variant: "on-artwork" | "on-placeholder"
+}) {
+  return (
+    <div
+      className={cn(
+        "absolute inset-x-0 bottom-0 z-10 border-t px-3 py-3 sm:py-3.5",
+        "border-white/15 bg-black/55 backdrop-blur-md supports-backdrop-filter:bg-black/45",
+        variant === "on-placeholder" &&
+          "border-white/10 bg-black/70 supports-backdrop-filter:bg-black/55",
+      )}
+    >
+      {previewUrl ? (
+        <audio controls src={previewUrl} className="block h-10 w-full sm:h-11" preload="none" />
+      ) : (
+        <p className="py-1 text-center text-xs text-zinc-400 sm:text-sm">No preview</p>
+      )}
+    </div>
+  )
+}
+
+const CAPTION_FADE_DELAY_MS = 420
+const CAPTION_FADE_DURATION_MS = 900
+
+function JourneySlide({
+  song,
+  isSelected,
+}: {
+  song: any
+  isSelected: boolean
+}) {
+  const [captionVisible, setCaptionVisible] = useState(false)
+
+  useEffect(() => {
+    if (!isSelected) {
+      setCaptionVisible(false)
+      return
+    }
+
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    if (reducedMotion) {
+      setCaptionVisible(true)
+      return
+    }
+
+    setCaptionVisible(false)
+    const show = window.setTimeout(() => setCaptionVisible(true), CAPTION_FADE_DELAY_MS)
+    return () => window.clearTimeout(show)
+  }, [isSelected])
+
+  return (
+    <div className="flex w-full flex-col items-center gap-4">
+      <div
+        className={cn(
+          "relative w-full max-w-[min(100%,28rem)] shrink-0 overflow-hidden rounded-2xl border-2 shadow-md animate-in fade-in duration-300",
+          song.imageUrl ? "border-border bg-card" : "border-border/60 bg-zinc-900 dark:bg-zinc-950",
+        )}
+      >
+        {song.imageUrl ? (
+          <img
+            src={song.imageUrl}
+            alt=""
+            className="block max-h-[min(60svh,36rem)] w-full bg-muted object-contain dark:bg-zinc-900"
+          />
+        ) : (
+          <div
+            aria-hidden
+            className="flex min-h-[12rem] w-full flex-col justify-end bg-gradient-to-b from-zinc-800 to-zinc-950 sm:min-h-[13rem]"
+          />
+        )}
+        <CardPreviewBar
+          previewUrl={song.previewUrl}
+          variant={song.imageUrl ? "on-artwork" : "on-placeholder"}
+        />
+      </div>
+      <div
+        aria-hidden={!captionVisible}
+        className={cn(
+          "mx-auto w-full max-w-[min(100%,28rem)] space-y-2 px-1 text-center",
+          "motion-reduce:transition-none motion-reduce:opacity-100",
+          "transition-opacity ease-out",
+          captionVisible ? "opacity-100" : "opacity-0",
+        )}
+        style={{
+          transitionDuration: captionVisible ? `${CAPTION_FADE_DURATION_MS}ms` : `${Math.min(220, CAPTION_FADE_DURATION_MS)}ms`,
+        }}
+      >
+        <p className="text-lg font-semibold tracking-tight text-foreground">{song.title}</p>
+        <p className="text-foreground text-sm sm:text-base">by {song.artist}</p>
+        {song.explanation ? (
+          <p className="text-foreground pt-1 text-sm leading-snug sm:text-base">{song.explanation}</p>
+        ) : null}
+      </div>
+    </div>
+  )
+}
 
 // interface ResultsProps {
 //   baseline: {
@@ -24,33 +274,302 @@ import {
 // }
 
 function Results() {
+  const [profile, setProfile] = useState<{
+    baseline: MusicBaseline | null
+    currEmotContext: CurrEmotContext | null
+  } | null>(null)
 
-  const storedBaseline = localStorage.getItem('musicBaseline')
-  const baseline = storedBaseline ? JSON.parse(storedBaseline) as {
-    favGenres: string[],
-    favArtists: string[],
-    favTracks: [string,string[]][],
-    personalContexts: string[],
-    addContext: string
-  } : null
-
-  const storedEmotContext = localStorage.getItem('currEmotContext')
-  const currEmotContext = storedEmotContext ?  JSON.parse(storedEmotContext) as {
-    currRant: string,
-    currTracks: ([string, string[]] | { name: string; artists: string[]; imageUrl?: string })[],
-    emotions: string[]
-  } : null
-
-  // const [loading, setLoading] = useState<boolean>(true)
-  // const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const next = await enrichStoredMusicProfilesWithReccoBeats()
+      if (!cancelled) setProfile(next)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const [claudeRes, setClaudeRes] = useState<any>(null)
   // const [previews, setPreviews] = useState<any[]>([])
 
+  const [insightLoadingL1, setInsightLoadingL1] = useState(false)
+  const [insightLoadingL2, setInsightLoadingL2] = useState(false)
+  const [insightLoadingRotator, setInsightLoadingRotator] = useState(false)
+
+  const [revealMirrorTitle, setRevealMirrorTitle] = useState(false)
+  const [revealMirrorInsight, setRevealMirrorInsight] = useState(false)
+
   const [journeySongs, setJourneySongs] = useState<any[]>([])
   const [journeySongsLoading, setJourneySongsLoading] = useState(false)
 
+  const [playlistWhyExpanded, setPlaylistWhyExpanded] = useState(false)
+  const playlistWhyTriggerId = useId()
+  const playlistWhyPanelId = useId()
+
+  const [journeyCarouselApi, setJourneyCarouselApi] = useState<CarouselApi | null>(null)
+  const [journeySnapIndex, setJourneySnapIndex] = useState(0)
+
+  const playlistSectionRef = useRef<HTMLElement>(null)
+  const playlistRevealHandledRef = useRef(false)
+  const playlistStaggerTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
+
+  const [journeyLinesAllowed, setJourneyLinesAllowed] = useState(false)
+  /** Opacity entrance for journey lines (starts false each time the block mounts). */
+  const [journeyLinesEntered, setJourneyLinesEntered] = useState(false)
+  const [playlistRevealButtonReady, setPlaylistRevealButtonReady] = useState(false)
+  const [playlistRevealAllowed, setPlaylistRevealAllowed] = useState(false)
+  const [playlistCtaEntered, setPlaylistCtaEntered] = useState(false)
+
+  const [revealPlaylistHeading, setRevealPlaylistHeading] = useState(false)
+  const [revealPlaylistWhy, setRevealPlaylistWhy] = useState(false)
+  const [revealPlaylistCarousel, setRevealPlaylistCarousel] = useState(false)
+
+  const clearPlaylistStaggerTimers = () => {
+    for (const id of playlistStaggerTimersRef.current) {
+      window.clearTimeout(id)
+    }
+    playlistStaggerTimersRef.current = []
+  }
+
+  const resetPlaylistReveals = () => {
+    setRevealPlaylistHeading(false)
+    setRevealPlaylistWhy(false)
+    setRevealPlaylistCarousel(false)
+  }
+
   useEffect(() => {
+    if (claudeRes) {
+      setInsightLoadingL1(false)
+      setInsightLoadingL2(false)
+      setInsightLoadingRotator(false)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      queueMicrotask(() => {
+        setInsightLoadingL1(true)
+        setInsightLoadingL2(true)
+        setInsightLoadingRotator(true)
+      })
+      return undefined
+    }
+
+    const intro = INSIGHT_LOADER_INTRO_MS
+    const fade = INSIGHT_LOADER_LINE_FADE_MS
+    const intra = INSIGHT_LOADER_INTRA_MS
+    const beforeRot = INSIGHT_LOADER_BEFORE_ROTATOR_MS
+
+    const line2At = intro + fade + intra
+    const rotatorAt = line2At + fade + beforeRot
+
+    const ids: ReturnType<typeof setTimeout>[] = [
+      window.setTimeout(() => setInsightLoadingL1(true), intro),
+      window.setTimeout(() => setInsightLoadingL2(true), line2At),
+      window.setTimeout(() => setInsightLoadingRotator(true), rotatorAt),
+    ]
+
+    return () => {
+      for (const id of ids) {
+        window.clearTimeout(id)
+      }
+    }
+  }, [claudeRes])
+
+  /** After insight fade completes, allow journey rotating lines (still requires `journeySongsLoading`). */
+  useEffect(() => {
+    if (!claudeRes || !journeySongsLoading) {
+      setJourneyLinesAllowed(false)
+      return
+    }
+    if (!revealMirrorInsight) {
+      setJourneyLinesAllowed(false)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      setJourneyLinesAllowed(true)
+      return undefined
+    }
+
+    const id = window.setTimeout(() => {
+      setJourneyLinesAllowed(true)
+    }, INSIGHT_BODY_FADE_MS)
+
+    return () => window.clearTimeout(id)
+  }, [claudeRes, journeySongsLoading, revealMirrorInsight])
+
+  /** After journey lines are allowed, fade the container in slowly (not an instant pop-in). */
+  useLayoutEffect(() => {
+    if (!journeySongsLoading || !journeyLinesAllowed) {
+      setJourneyLinesEntered(false)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      setJourneyLinesEntered(true)
+      return
+    }
+
+    let cancelled = false
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) setJourneyLinesEntered(true)
+      })
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
+    }
+  }, [journeySongsLoading, journeyLinesAllowed])
+
+  /** Journey work finished → brief beat → show “Show me my playlist” (user taps to scroll + reveal). */
+  useEffect(() => {
+    if (!claudeRes) {
+      setPlaylistRevealButtonReady(false)
+      setPlaylistRevealAllowed(false)
+      return
+    }
+    if (journeySongsLoading) {
+      setPlaylistRevealButtonReady(false)
+      return
+    }
+
+    const id = window.setTimeout(() => {
+      setPlaylistRevealButtonReady(true)
+    }, PLAYLIST_AFTER_LOADER_MS)
+
+    return () => window.clearTimeout(id)
+  }, [claudeRes, journeySongsLoading])
+
+  /** Gentle fade-in for the playlist CTA (same pacing idea as journey lines). */
+  useLayoutEffect(() => {
+    if (!claudeRes || journeySongsLoading || !playlistRevealButtonReady || playlistRevealAllowed) {
+      setPlaylistCtaEntered(false)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      setPlaylistCtaEntered(true)
+      return
+    }
+
+    let cancelled = false
+    let innerRaf = 0
+    const outerRaf = requestAnimationFrame(() => {
+      innerRaf = requestAnimationFrame(() => {
+        if (!cancelled) setPlaylistCtaEntered(true)
+      })
+    })
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(outerRaf)
+      cancelAnimationFrame(innerRaf)
+    }
+  }, [claudeRes, journeySongsLoading, playlistRevealButtonReady, playlistRevealAllowed])
+
+  useEffect(() => {
+    if (!claudeRes) {
+      playlistRevealHandledRef.current = false
+      clearPlaylistStaggerTimers()
+      resetPlaylistReveals()
+      return
+    }
+
+    if (!playlistRevealAllowed) {
+      playlistRevealHandledRef.current = false
+      clearPlaylistStaggerTimers()
+      resetPlaylistReveals()
+      return
+    }
+
+    if (playlistRevealHandledRef.current) return
+    playlistRevealHandledRef.current = true
+
+    const el = playlistSectionRef.current
+    if (!el) return
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    const rect = el.getBoundingClientRect()
+    const startY = window.scrollY
+    const targetY = Math.max(0, rect.top + window.scrollY - PLAYLIST_SCROLL_MARGIN_PX)
+    const distance = targetY - startY
+
+    const staggerMs = MIRROR_STAGGER_STEP_MS
+
+    const revealAfterScroll = () => {
+      clearPlaylistStaggerTimers()
+      if (reduced) {
+        queueMicrotask(() => {
+          setRevealPlaylistHeading(true)
+          setRevealPlaylistWhy(true)
+          setRevealPlaylistCarousel(true)
+        })
+        return
+      }
+      queueMicrotask(() => setRevealPlaylistHeading(true))
+      playlistStaggerTimersRef.current.push(
+        window.setTimeout(() => setRevealPlaylistWhy(true), staggerMs),
+        window.setTimeout(() => setRevealPlaylistCarousel(true), staggerMs * 2),
+      )
+    }
+
+    if (reduced) {
+      window.scrollTo({ top: targetY, behavior: "auto" })
+      revealAfterScroll()
+      return () => clearPlaylistStaggerTimers()
+    }
+
+    if (Math.abs(distance) < 2) {
+      revealAfterScroll()
+      return () => clearPlaylistStaggerTimers()
+    }
+
+    const t0 = performance.now()
+    const rafRef = { current: 0 }
+
+    const tick = (now: number) => {
+      const elapsed = now - t0
+      const t = Math.min(1, elapsed / PLAYLIST_SCROLL_DURATION_MS)
+      const y = startY + distance * easeInOutCubic(t)
+      window.scrollTo(0, y)
+      if (t < 1) {
+        rafRef.current = window.requestAnimationFrame(tick)
+      } else {
+        revealAfterScroll()
+      }
+    }
+
+    rafRef.current = window.requestAnimationFrame(tick)
+
+    return () => {
+      window.cancelAnimationFrame(rafRef.current)
+      clearPlaylistStaggerTimers()
+    }
+  }, [claudeRes, playlistRevealAllowed])
+
+  useEffect(() => {
+    if (!profile) return
+
+    const { baseline, currEmotContext } = profile
 
     const fetchClaudeResponse = async (retries = 3) => {
       try {
@@ -73,13 +592,42 @@ function Results() {
           console.error("Failed after multiple attempts:", error)
         }
       }
-      // const data = await response.json()
-      // return data
     }
 
-    fetchClaudeResponse();
-  }, [])
+    void fetchClaudeResponse()
+  }, [profile])
 
+  useEffect(() => {
+    if (!claudeRes) {
+      setRevealMirrorTitle(false)
+      setRevealMirrorInsight(false)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    setRevealMirrorTitle(false)
+    setRevealMirrorInsight(false)
+
+    if (reduced) {
+      queueMicrotask(() => {
+        setRevealMirrorTitle(true)
+        setRevealMirrorInsight(true)
+      })
+      return undefined
+    }
+
+    const base = INSIGHT_STILLNESS_MS
+    const d = MIRROR_STAGGER_STEP_MS
+    const t1 = window.setTimeout(() => setRevealMirrorTitle(true), base)
+    const t2 = window.setTimeout(() => setRevealMirrorInsight(true), base + d)
+
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [claudeRes])
 
   useEffect(() => {
     if (!claudeRes) return
@@ -159,6 +707,17 @@ function Results() {
     }
   }, [claudeRes])
 
+  useEffect(() => {
+    if (!journeyCarouselApi) return
+    const sync = () => setJourneySnapIndex(journeyCarouselApi.selectedScrollSnap())
+    sync()
+    journeyCarouselApi.on("select", sync)
+    journeyCarouselApi.on("reInit", sync)
+    return () => {
+      journeyCarouselApi.off("select", sync)
+      journeyCarouselApi.off("reInit", sync)
+    }
+  }, [journeyCarouselApi])
 
   const handleSongPreview = async (songs: any[]) => {
     const songsWithPreviews: any[] = []
@@ -200,96 +759,211 @@ function Results() {
   }
 
 
-  console.log("Baseline:", baseline)
-  console.log("Emotional Context", currEmotContext)
+  console.log("Baseline:", profile?.baseline)
+  console.log("Emotional Context", profile?.currEmotContext)
 
-  const resultSongCard = (song: any) => {
-    const hoverOverlay = (withLightScrim: boolean) => (
-      <div
-        className={`absolute inset-0 flex h-full flex-col items-center overflow-hidden px-4 py-4 text-center opacity-0 pointer-events-none transition-opacity duration-300 group-hover:pointer-events-auto group-hover:opacity-100 ${withLightScrim ? "bg-white/95" : ""}`}
-      >
-        <div className="flex min-h-0 w-full flex-1 flex-col items-center justify-center gap-2 overflow-y-auto py-2 [scrollbar-width:thin]">
-          <p className="line-clamp-2 w-full shrink-0 text-center text-base font-semibold text-black drop-shadow-sm sm:text-lg">
-            {song.title}
-          </p>
-          <p className="line-clamp-2 w-full shrink-0 text-center text-sm text-black/90 drop-shadow-sm">by {song.artist}</p>
-          {song.explanation ? (
-            <p className="w-full text-center text-sm leading-snug text-black/85 drop-shadow-sm sm:text-base">
-              {song.explanation}
+  return (
+    <div className="flex min-h-svh flex-col px-6 py-10">
+      {!claudeRes ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-10 px-4 text-center">
+          <div aria-live="polite" className="mx-auto w-full max-w-prose space-y-2">
+            <p className={insightLoadingLineFadeClass(insightLoadingL1)}>Thanks for sharing.</p>
+            <p className={insightLoadingLineFadeClass(insightLoadingL2)}>
+              Hang tight while we put together something for you.
             </p>
-          ) : null}
-        </div>
-        <div className="mt-auto w-full shrink-0 pt-3">
-          {song.previewUrl ? (
-            <audio controls src={song.previewUrl} className="block h-10 w-full sm:h-11" preload="none" />
-          ) : (
-            <p className="py-1 text-center text-xs text-black/70">No preview</p>
-          )}
-        </div>
-      </div>
-    )
-
-    if (song.imageUrl) {
-      return (
-        <div
-          className="group relative inline-block w-fit max-w-full shrink-0 animate-in fade-in duration-300 overflow-hidden rounded-2xl border-2 border-border bg-card shadow-md"
-        >
-          <img
-            src={song.imageUrl}
-            alt=""
-            className="block h-auto max-h-[min(70svh,44rem)] w-auto max-w-full bg-muted object-contain transition-opacity duration-300 group-hover:opacity-40 dark:bg-zinc-900"
-          />
-          {hoverOverlay(false)}
-        </div>
-      )
-    }
-
-    return (
-      <div
-        className="group relative inline-flex h-52 w-72 max-w-full shrink-0 animate-in fade-in duration-300 overflow-hidden rounded-2xl border-2 border-border/60 bg-zinc-900 shadow-md dark:bg-zinc-950 sm:h-56 sm:w-80"
-      >
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 py-4 text-center transition-opacity duration-300 group-hover:opacity-0">
-          <p className="line-clamp-3 w-full text-center text-base font-medium text-zinc-50 sm:text-lg">{song.title}</p>
-          <p className="line-clamp-2 w-full text-center text-sm text-zinc-300 sm:text-base">by {song.artist}</p>
-        </div>
-        {hoverOverlay(true)}
-      </div>
-    )
-  }
-
-    return (
-      <div className="min-h-svh px-6 py-10">
-        <div className="mx-auto w-full max-w-3xl space-y-6">
-        <p>Hoiiii! This is the results stage.</p>
-        {claudeRes && (
-          <div className="space-y-6">
-            <h2>The Mirror</h2>
-            <p>{claudeRes.insight}</p>
-            <h2>The Bridge</h2>
-            <p>{claudeRes.isoExplanation}</p>
-            <h2>The Journey</h2>
-            {journeySongsLoading ? (
-              <p className="text-sm text-muted-foreground animate-pulse">Preparing songs…</p>
-            ) : journeySongs.length > 0 ? (
-              <Carousel opts={{ align: "center", loop: false }} className="w-full max-w-full">
-                <CarouselContent>
-                  {journeySongs.map((song: any, i: number) => (
-                    <CarouselItem key={`journey-${i}-${song.title}-${song.artist}`}>
-                      <div className="flex justify-center py-3">{resultSongCard(song)}</div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselPrevious className="left-0 border-border bg-background/90 shadow-sm sm:left-1" />
-                <CarouselNext className="right-0 border-border bg-background/90 shadow-sm sm:right-1" />
-              </Carousel>
-            ) : (
-              <p className="text-sm text-muted-foreground">No songs matched for this journey.</p>
-            )}
           </div>
-        )}
+          <div
+            className={cn(
+              "mx-auto w-full max-w-lg transition-opacity ease-out motion-reduce:transition-none",
+              "motion-safe:duration-[900ms]",
+              insightLoadingRotator
+                ? "opacity-100"
+                : "pointer-events-none opacity-0 motion-reduce:opacity-100",
+            )}
+          >
+            <RotatingLoadingLines lines={INSIGHT_LOADING_LINES} active={insightLoadingRotator && !claudeRes} />
+          </div>
         </div>
-      </div>
-    )
-  }
+      ) : null}
+      {claudeRes ? (
+        <>
+          <div
+            className={cn(
+              "relative flex flex-col items-center px-4 text-center",
+              // Journey lines are position:absolute, so they don’t participate in flex layout — safe to center the insight.
+              (journeySongsLoading || !playlistRevealAllowed)
+                ? "min-h-svh justify-center"
+                : "justify-start pt-2",
+              playlistRevealAllowed ? "pb-8 sm:pb-10" : "pb-10 sm:pb-12",
+            )}
+          >
+            <div
+              className={cn(
+                "mx-auto max-w-lg space-y-5",
+                // Breathing room above absolute-positioned journey lines / playlist CTA on tight viewports.
+                ((journeySongsLoading && journeyLinesAllowed) ||
+                  (playlistRevealButtonReady && !playlistRevealAllowed)) &&
+                  "pb-8 sm:pb-10",
+              )}
+            >
+              <h2
+                className={cn(
+                  "text-foreground text-xl font-semibold tracking-tight sm:text-2xl",
+                  "transition-opacity ease-out motion-reduce:transition-none",
+                  revealMirrorTitle
+                    ? "opacity-100 motion-safe:duration-[1400ms]"
+                    : "opacity-0 motion-safe:duration-0",
+                )}
+              >
+                Where the music meets you now
+              </h2>
+              <p
+                className={cn(
+                  "text-foreground text-[0.9375rem] leading-relaxed sm:text-base",
+                  "transition-opacity ease-out motion-reduce:transition-none",
+                  revealMirrorInsight
+                    ? "opacity-100 motion-safe:duration-[1400ms]"
+                    : "opacity-0 motion-safe:duration-0",
+                )}
+              >
+                {claudeRes.insight}
+              </p>
+            </div>
+            {journeySongsLoading && journeyLinesAllowed ? (
+              <div
+                className={cn(
+                  "absolute inset-x-0 bottom-12 z-10 flex justify-center px-2 sm:bottom-16 sm:px-4",
+                  "transition-opacity ease-out motion-reduce:transition-none",
+                  "motion-safe:duration-[1200ms]",
+                  journeyLinesEntered ? "opacity-100" : "opacity-0",
+                )}
+              >
+                <div className="mx-auto w-full max-w-lg">
+                  <RotatingLoadingLines lines={JOURNEY_LOADING_LINES} active />
+                </div>
+              </div>
+            ) : playlistRevealButtonReady && !playlistRevealAllowed ? (
+              <div
+                className={cn(
+                  "absolute inset-x-0 bottom-12 z-10 flex justify-center px-2 sm:bottom-16 sm:px-4",
+                  "transition-opacity ease-out motion-reduce:transition-none",
+                  "motion-safe:duration-[1200ms]",
+                  playlistCtaEntered ? "opacity-100" : "pointer-events-none opacity-0",
+                )}
+              >
+                <Button
+                  type="button"
+                  size="lg"
+                  className="min-w-[12rem]"
+                  onClick={() => setPlaylistRevealAllowed(true)}
+                >
+                  Show me my playlist
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          {playlistRevealAllowed ? (
+            <section
+              ref={playlistSectionRef}
+              className="mx-auto mt-6 w-full max-w-3xl scroll-mt-8 sm:mt-10"
+              aria-label="Your curated playlist"
+            >
+              <div className="space-y-6">
+                <h2
+                  className={cn(
+                    "text-xl font-semibold tracking-tight transition-opacity ease-out motion-reduce:transition-none",
+                    revealPlaylistHeading
+                      ? "opacity-100 motion-safe:duration-[900ms]"
+                      : "opacity-0 motion-safe:duration-0",
+                  )}
+                >
+                  Musical nutrients for the journey forward
+                </h2>
+                <div
+                  className={cn(
+                    "mx-auto w-full max-w-xl text-center transition-opacity ease-out motion-reduce:transition-none",
+                    revealPlaylistWhy
+                      ? "opacity-100 motion-safe:duration-[900ms]"
+                      : "opacity-0 motion-safe:duration-0",
+                  )}
+                >
+                  <button
+                    type="button"
+                    id={playlistWhyTriggerId}
+                    aria-expanded={playlistWhyExpanded}
+                    aria-controls={playlistWhyPanelId}
+                    className={cn(
+                      "inline cursor-pointer border-0 bg-transparent p-0 text-center text-base font-medium text-foreground",
+                      "underline decoration-foreground/40 underline-offset-4",
+                      "hover:decoration-foreground hover:opacity-90 motion-reduce:transition-none transition-opacity",
+                      "rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+                    )}
+                    onClick={() => setPlaylistWhyExpanded((o) => !o)}
+                  >
+                    Why these songs?
+                  </button>
+                  <div
+                    id={playlistWhyPanelId}
+                    role="region"
+                    aria-labelledby={playlistWhyTriggerId}
+                    className={cn(
+                      "grid overflow-hidden motion-reduce:transition-none",
+                      "transition-[grid-template-rows] duration-500 ease-in-out motion-reduce:duration-0",
+                      playlistWhyExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div
+                        className={cn(
+                          "pt-3 text-left motion-reduce:transition-none",
+                          "transition-opacity duration-500 ease-in-out motion-reduce:duration-0",
+                          playlistWhyExpanded ? "opacity-100" : "pointer-events-none opacity-0",
+                        )}
+                      >
+                        <p className="text-foreground text-[0.9375rem] leading-relaxed sm:text-base">
+                          {claudeRes.isoExplanation}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "transition-opacity ease-out motion-reduce:transition-none",
+                    revealPlaylistCarousel
+                      ? "opacity-100 motion-safe:duration-[900ms]"
+                      : "opacity-0 motion-safe:duration-0",
+                  )}
+                >
+                  {journeySongs.length > 0 ? (
+                    <Carousel
+                      opts={{ align: "center", loop: false }}
+                      className="w-full max-w-full"
+                      setApi={setJourneyCarouselApi}
+                    >
+                      <CarouselContent>
+                        {journeySongs.map((song: any, i: number) => (
+                          <CarouselItem key={`journey-${i}-${song.title}-${song.artist}`}>
+                            <div className="flex justify-center py-3">
+                              <JourneySlide song={song} isSelected={i === journeySnapIndex} />
+                            </div>
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                      <CarouselPrevious className="left-0 border-border bg-background/90 shadow-sm sm:left-1" />
+                      <CarouselNext className="right-0 border-border bg-background/90 shadow-sm sm:right-1" />
+                    </Carousel>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No songs matched for this journey.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
 
-  export default Results
+export default Results

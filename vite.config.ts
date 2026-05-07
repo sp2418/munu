@@ -12,7 +12,14 @@ export default defineConfig({
     },
   },
   server: {
+    // CRA-style: open http://localhost:3000 for the UI. APIs need a second process:
+    // `npm run dev:api` (vercel on 3001) so /api is proxied below.
+    port: 3000,
     proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3001',
+        changeOrigin: true,
+      },
       '/spotify': {
         target: 'https://api.spotify.com',
         changeOrigin: true,
