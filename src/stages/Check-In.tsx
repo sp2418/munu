@@ -1,8 +1,45 @@
 import QuestionBlock from "../components/QuestionBlock"
-import QuestionStageLayout from "../components/QuestionStageLayout"
+import QuestionStageLayout, {
+  QUESTION_HINT_AUTO_HIDE_MS,
+  QUESTION_REQUIRED_FOOTER_HINT,
+} from "../components/QuestionStageLayout"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
+import type { CurrEmotContext } from "../lib/reccobeatsEnrich"
 
 import { useState, useEffect } from "react"
+
+type CheckInTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
+
+function checkInTracksFromPersisted(rows: CurrEmotContext["currTracks"] | undefined): CheckInTrackHydration[] {
+    const out: CheckInTrackHydration[] = []
+    const list = Array.isArray(rows) ? rows : []
+    for (const t of list) {
+        if (Array.isArray(t)) {
+            const row = t as unknown[]
+            const name = row[0]
+            const artists = row[1]
+            if (typeof name !== "string" || !Array.isArray(artists)) continue
+            const id = typeof row[2] === "string" && row[2] ? row[2] : `anon:${name}`
+            const maybeMeta = row[3]
+            const imageUrl =
+                typeof maybeMeta === "object" &&
+                maybeMeta !== null &&
+                "imageUrl" in maybeMeta &&
+                typeof (maybeMeta as { imageUrl?: string }).imageUrl === "string"
+                    ? (maybeMeta as { imageUrl: string }).imageUrl
+                    : ""
+            out.push({ id, name, artists: artists as string[], imageUrl })
+        } else if (t && typeof t === "object" && "id" in t && typeof t.id === "string") {
+            out.push({
+                id: t.id,
+                name: typeof t.name === "string" ? t.name : "",
+                artists: Array.isArray(t.artists) ? t.artists.map(String) : [],
+                imageUrl: typeof t.imageUrl === "string" ? t.imageUrl : "",
+            })
+        }
+    }
+    return out
+}
 
 interface CheckInProps {
     setView: (view: string) => void;
@@ -12,6 +49,7 @@ function CheckIn({setView}: CheckInProps) {
     const [rantSesh, setRantSesh] = useState<string>("")
     const [listEmotions, setListEmotions] = useState<string[]>([])
     const [currentQuestion, setCurrentQuestion] = useState(0)
+    const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
 
     const handleRantSession = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setRantSesh(e.target.value)
@@ -101,6 +139,7 @@ function CheckIn({setView}: CheckInProps) {
 
     const [searchTermTrack, setSearchTermTrack] = useState<string>("")
     const [spotifyTracks, setSpotifyTracks] = useState<CheckInTrack[]>([])
+    const [listOfTracks, setListOfTracks] = useState<CheckInTrack[]>([])
 
     type SpotifyTrack = {
         album: {
@@ -161,7 +200,33 @@ function CheckIn({setView}: CheckInProps) {
         // }
     }, [searchTermTrack])
 
-    const [listOfTracks, setListOfTracks] = useState<CheckInTrack[]>([])
+    useEffect(() => {
+        setNextBlockedHint(null)
+    }, [currentQuestion])
+
+    useEffect(() => {
+        if (!nextBlockedHint) return
+        const id = window.setTimeout(() => setNextBlockedHint(null), QUESTION_HINT_AUTO_HIDE_MS)
+        return () => window.clearTimeout(id)
+    }, [nextBlockedHint])
+
+    useEffect(() => {
+        const raw = localStorage.getItem("currEmotContext")
+        if (!raw) return
+        let parsed: CurrEmotContext
+        try {
+            parsed = JSON.parse(raw) as CurrEmotContext
+        } catch {
+            return
+        }
+        if (typeof parsed.currRant === "string") {
+            setRantSesh(parsed.currRant)
+        }
+        if (Array.isArray(parsed.emotions)) {
+            setListEmotions([...parsed.emotions])
+        }
+        setListOfTracks(checkInTracksFromPersisted(parsed.currTracks))
+    }, [])
 
     const handleAddTrack = (track: CheckInTrack) => {
         if (!listOfTracks.some((t) => t.id === track.id)) {
@@ -191,7 +256,26 @@ function CheckIn({setView}: CheckInProps) {
     const totalQuestions = 3
     const isLastQuestion = currentQuestion === totalQuestions - 1
 
+    /** Songs question may be left empty; rant and emotions are required. */
+    const isCheckInQuestionAnswered = (q: number): boolean => {
+        switch (q) {
+            case 0:
+                return rantSesh.trim().length > 0
+            case 1:
+                return listEmotions.length > 0
+            case 2:
+                return true
+            default:
+                return true
+        }
+    }
+
     const handleNext = () => {
+        if (!isCheckInQuestionAnswered(currentQuestion)) {
+            setNextBlockedHint(QUESTION_REQUIRED_FOOTER_HINT)
+            return
+        }
+        setNextBlockedHint(null)
         if (isLastQuestion) {
             handleSesh()
             return
@@ -270,6 +354,7 @@ function CheckIn({setView}: CheckInProps) {
         onNext={handleNext}
         isBackDisabled={currentQuestion === 0}
         nextLabel={isLastQuestion ? "Done" : "Next"}
+        nextFooterHint={nextBlockedHint}
         questionKey={`checkin-question-${currentQuestion}`}
       >
         {renderCurrentQuestion()}

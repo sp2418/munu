@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 import './App.css'
 import Onboarding from './stages/Onboarding'
 import CheckIn from './stages/Check-In'
 import Results from './stages/Results'
+import { clearCheckInRantAndEmotionsKeepTracksInStorage } from './lib/currEmotContextStorage'
 
 
 interface App {
@@ -26,6 +27,9 @@ function App() {
   }
   
   const [currentView, setCurrentView] = useState<string>(initView)
+  /** When true, onboarding mounts straight at the first music taste question (skips welcome + prep). */
+  const [onboardingStartAtMusicProfile, setOnboardingStartAtMusicProfile] = useState(false)
+  const prevViewRef = useRef<string>(currentView)
 
   useEffect(() => {
     const getSpotifyToken = async () => {
@@ -37,11 +41,40 @@ function App() {
     getSpotifyToken()
   }, [])
 
+  useEffect(() => {
+    const prev = prevViewRef.current
+    prevViewRef.current = currentView
+    if (prev === "onboarding" && currentView !== "onboarding") {
+      setOnboardingStartAtMusicProfile(false)
+    }
+  }, [currentView])
+
+  const handleRebuildMusicProfile = () => {
+    clearCheckInRantAndEmotionsKeepTracksInStorage()
+    setOnboardingStartAtMusicProfile(true)
+    setCurrentView("onboarding")
+  }
+
+  const handleFreshCheckIn = () => {
+    clearCheckInRantAndEmotionsKeepTracksInStorage()
+    setCurrentView("checkin")
+  }
+
   return (
     <div>
-      {currentView === "onboarding" && <Onboarding setView={setCurrentView} />}
+      {currentView === "onboarding" && (
+        <Onboarding
+          setView={setCurrentView}
+          startAtMusicProfileQuestions={onboardingStartAtMusicProfile}
+        />
+      )}
       {currentView === "checkin" && <CheckIn setView={setCurrentView} />}
-      {currentView === "results" && <Results />}
+      {currentView === "results" && (
+        <Results
+          onRebuildMusicProfile={handleRebuildMusicProfile}
+          onStartCheckInFresh={handleFreshCheckIn}
+        />
+      )}
     </div>
   );
 }

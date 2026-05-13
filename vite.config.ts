@@ -30,6 +30,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/accounts/, ''),
       },
+      '/itunes': {
+        target: 'https://itunes.apple.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/itunes/, ''),
+      },
       '/anthropic': {
         target: 'https://api.anthropic.com',
         changeOrigin: true,

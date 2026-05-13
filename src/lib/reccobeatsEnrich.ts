@@ -52,13 +52,36 @@ export type CurrEmotContext = {
 
 type EnrichMap = Record<string, ReccoTrackEnrichment | null>
 
+/**
+ * Baseline `favTracks` rows are arrays:
+ * - Legacy enriched: `[name, artists, id, ReccoTrackEnrichment]`
+ * - With album art (before enrich): `[name, artists, id, albumImageUrl]`
+ * - With album art (after enrich): `[name, artists, id, albumImageUrl, ReccoTrackEnrichment]`
+ */
 function isBaselineTupleEnriched(row: unknown[]): boolean {
+  if (!Array.isArray(row) || row.length < 4) return false
+  const fourth = row[3]
+  if (
+    fourth != null &&
+    typeof fourth === "object" &&
+    "reccobeatsId" in (fourth as object)
+  ) {
+    return true
+  }
+  const fifth = row[4]
   return (
-    row.length >= 4 &&
-    row[3] != null &&
-    typeof row[3] === "object" &&
-    "reccobeatsId" in (row[3] as object)
+    row.length >= 5 &&
+    fifth != null &&
+    typeof fifth === "object" &&
+    "reccobeatsId" in (fifth as object)
   )
+}
+
+function baselineTupleAlbumImageUrl(row: unknown[]): string | undefined {
+  if (!Array.isArray(row) || row.length < 4) return undefined
+  const fourth = row[3]
+  if (typeof fourth === "string" && fourth.length > 0) return fourth
+  return undefined
 }
 
 /** Spotify IDs that still need a ReccoBeats lookup (skip already-enriched rows). */
@@ -96,7 +119,10 @@ function applyEnrichmentToBaseline(
       if (isBaselineTupleEnriched(row)) return row
       const data = bySpotifyId[row[2]]
       if (!data) return row
-      return [...row.slice(0, 3), data]
+      const albumUrl = baselineTupleAlbumImageUrl(row)
+      return albumUrl !== undefined
+        ? [...row.slice(0, 3), albumUrl, data]
+        : [...row.slice(0, 3), data]
     }),
   }
 }
@@ -122,8 +148,8 @@ function applyEnrichmentToCurr(curr: CurrEmotContext, bySpotifyId: EnrichMap): C
 /**
  * Resolves Spotify track IDs via ReccoBeats, fetches audio features, merges into
  * `musicBaseline` / `currEmotContext` in localStorage, and returns the updated objects.
- * Skips tracks already enriched (baseline tuples with a `reccobeatsId` in the 4th slot;
- * check-in objects with `reccobeatsId` set).
+ * Skips baseline tuples already enriched (`reccobeatsId` in slot 4, or slot 5 when slot 4 holds an album image URL).
+ * Skips check-in track objects that already have `reccobeatsId` set.
  */
 export async function enrichStoredMusicProfilesWithReccoBeats(): Promise<{
   baseline: MusicBaseline | null

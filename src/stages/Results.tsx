@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useId, useRef } from "react"
+import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo } from "react"
 
 import {
   type CarouselApi,
@@ -9,6 +9,7 @@ import {
   CarouselPrevious,
 } from "../components/ui/carousel"
 import { Button } from "../components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { cn } from "../lib/utils"
 import {
   enrichStoredMusicProfilesWithReccoBeats,
@@ -54,6 +55,224 @@ const PLAYLIST_SCROLL_DURATION_MS = 2200
 
 /** Matches `scroll-mt-8` on the playlist `<section>`. */
 const PLAYLIST_SCROLL_MARGIN_PX = 32
+
+/** After playlist carousel finishes revealing, wait then scroll so the check-in CTA is in view. */
+const PLAYLIST_READY_CTA_SCROLL_AFTER_MS = 2500
+
+/** Second scroll: slightly shorter than initial playlist scroll. */
+const PLAYLIST_READY_CTA_SCROLL_DURATION_MS = 1800
+
+/** Skip Claude API when revisiting Results with the same profile + check-in payload. */
+const CLAUDE_RESPONSE_CACHE_KEY = "munu.claudeResponseCache.v1"
+/** Carousel rows only — avoids blowing combined cache quota; hydrated alongside main cache. */
+const RESULTS_JOURNEY_CACHE_KEY = "munu.resultsJourneyRows.v1"
+
+type ClaudeResponseCachePayload = {
+  fingerprint: string
+  parsed: unknown
+  /** Resolved carousel rows (Spotify + previews); omit on older caches. */
+  journeySongsResolved?: any[]
+}
+
+/** Fast deterministic fingerprint for cache keys (not cryptographic). */
+function djb2Hex(str: string): string {
+  let hash = 5381
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 33) ^ str.charCodeAt(i)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+function fingerprintForResultsInputs(baseline: MusicBaseline | null, curr: CurrEmotContext | null): string {
+  try {
+    return `${djb2Hex(JSON.stringify(baseline))}_${djb2Hex(JSON.stringify(curr))}`
+  } catch {
+    return `${Date.now()}`
+  }
+}
+
+function readClaudeCache(fingerprint: string): unknown | null {
+  try {
+    const raw = localStorage.getItem(CLAUDE_RESPONSE_CACHE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as ClaudeResponseCachePayload
+    if (!data || typeof data.fingerprint !== "string" || data.fingerprint !== fingerprint) return null
+    return data.parsed ?? null
+  } catch {
+    return null
+  }
+}
+
+type JourneyOnlyRowsPayload = {
+  fingerprint: string
+  songs: any[]
+}
+
+/** Resolved carousel rows stored separately so quota errors on the big Claude blob don’t drop songs. */
+function readJourneyRowsCache(fingerprint: string): any[] | null {
+  try {
+    const raw = localStorage.getItem(RESULTS_JOURNEY_CACHE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as JourneyOnlyRowsPayload
+    if (
+      !data ||
+      typeof data.fingerprint !== "string" ||
+      data.fingerprint !== fingerprint ||
+      !Array.isArray(data.songs) ||
+      data.songs.length === 0
+    ) {
+      return null
+    }
+    return data.songs
+  } catch {
+    return null
+  }
+}
+
+function writeJourneyRowsCache(fingerprint: string, songs: any[]): void {
+  if (!songs.length) return
+  try {
+    const payload: JourneyOnlyRowsPayload = { fingerprint, songs }
+    localStorage.setItem(RESULTS_JOURNEY_CACHE_KEY, JSON.stringify(payload))
+  } catch (e) {
+    console.warn("Could not persist journey rows cache:", e)
+  }
+}
+
+function writeClaudeCache(
+  fingerprint: string,
+  parsed: unknown,
+  options?: { journeySongsResolved?: any[] | null },
+): void {
+  try {
+    let journeyOut: any[] | undefined
+    if (options && Object.prototype.hasOwnProperty.call(options, "journeySongsResolved")) {
+      const jr = options.journeySongsResolved
+      journeyOut = jr != null && jr.length > 0 ? jr : undefined
+    } else {
+      const sidecar = readJourneyRowsCache(fingerprint)
+      if (sidecar && sidecar.length > 0) {
+        journeyOut = sidecar
+      } else {
+        const rawPrev = localStorage.getItem(CLAUDE_RESPONSE_CACHE_KEY)
+        if (rawPrev) {
+          const prev = JSON.parse(rawPrev) as ClaudeResponseCachePayload
+          if (
+            prev.fingerprint === fingerprint &&
+            Array.isArray(prev.journeySongsResolved) &&
+            prev.journeySongsResolved.length > 0
+          ) {
+            journeyOut = prev.journeySongsResolved
+          }
+        }
+      }
+    }
+    const payload: ClaudeResponseCachePayload = {
+      fingerprint,
+      parsed,
+      ...(journeyOut && journeyOut.length > 0 ? { journeySongsResolved: journeyOut } : {}),
+    }
+    localStorage.setItem(CLAUDE_RESPONSE_CACHE_KEY, JSON.stringify(payload))
+  } catch (e) {
+    console.warn("Could not persist Claude response cache:", e)
+  }
+}
+
+/** Persist carousel snapshot using whatever baseline/check-in is currently in localStorage. */
+function writeResultsCacheWithCurrentStorage(parsed: unknown, journeySongsResolved: any[]): void {
+  try {
+    const rawB = localStorage.getItem("musicBaseline")
+    const rawC = localStorage.getItem("currEmotContext")
+    if (!rawB || !rawC) return
+    const baseline = JSON.parse(rawB) as MusicBaseline
+    const curr = JSON.parse(rawC) as CurrEmotContext
+    const fp = fingerprintForResultsInputs(baseline, curr)
+    if (journeySongsResolved.length > 0) {
+      writeJourneyRowsCache(fp, journeySongsResolved)
+    }
+    writeClaudeCache(fp, parsed, { journeySongsResolved })
+  } catch (e) {
+    console.warn("writeResultsCacheWithCurrentStorage failed:", e)
+  }
+}
+
+type ResultsMountSnapshot = {
+  claude: any | null
+  journeySongs: any[]
+  journeySongsLoading: boolean
+  /** Insight + playlist rows restored — skip staged animations and “Show playlist”. */
+  resumeFullSnapshot: boolean
+}
+
+function tryHydrateResultsSnapshotSync(): ResultsMountSnapshot {
+  if (typeof window === "undefined") {
+    return {
+      claude: null,
+      journeySongs: [],
+      journeySongsLoading: false,
+      resumeFullSnapshot: false,
+    }
+  }
+  try {
+    const rawB = localStorage.getItem("musicBaseline")
+    const rawC = localStorage.getItem("currEmotContext")
+    if (!rawB || !rawC) {
+      return {
+        claude: null,
+        journeySongs: [],
+        journeySongsLoading: false,
+        resumeFullSnapshot: false,
+      }
+    }
+    const baseline = JSON.parse(rawB) as MusicBaseline
+    const currEmotContext = JSON.parse(rawC) as CurrEmotContext
+    const fp = fingerprintForResultsInputs(baseline, currEmotContext)
+    const raw = localStorage.getItem(CLAUDE_RESPONSE_CACHE_KEY)
+    if (!raw) {
+      return {
+        claude: null,
+        journeySongs: [],
+        journeySongsLoading: false,
+        resumeFullSnapshot: false,
+      }
+    }
+    const data = JSON.parse(raw) as ClaudeResponseCachePayload
+    if (
+      !data ||
+      typeof data.fingerprint !== "string" ||
+      data.fingerprint !== fp ||
+      data.parsed == null ||
+      typeof data.parsed !== "object" ||
+      !("insight" in (data.parsed as object))
+    ) {
+      return {
+        claude: null,
+        journeySongs: [],
+        journeySongsLoading: false,
+        resumeFullSnapshot: false,
+      }
+    }
+    let journey = Array.isArray(data.journeySongsResolved) ? data.journeySongsResolved : []
+    if (journey.length === 0) {
+      const sidecar = readJourneyRowsCache(fp)
+      if (sidecar) journey = sidecar
+    }
+    const hasJourney = journey.length > 0
+    return {
+      claude: data.parsed as any,
+      journeySongs: journey,
+      journeySongsLoading: !hasJourney,
+      resumeFullSnapshot: hasJourney,
+    }
+  } catch {
+    return {
+      claude: null,
+      journeySongs: [],
+      journeySongsLoading: false,
+      resumeFullSnapshot: false,
+    }
+  }
+}
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
@@ -258,22 +477,15 @@ function JourneySlide({
   )
 }
 
-// interface ResultsProps {
-//   baseline: {
-//     faveArtists: string[],
-//     faveTracks: [string, string[]][],
-//     favGenres: string[],
-//     personalContexts: string[],
-//     addContext: string
-//   } | null;
-//   currEmotContext: {
-//     emotions: string[],
-//     currTracks: [string, string[]][],
-//     currRant: string
-//   } | null;
-// }
+interface ResultsProps {
+  onRebuildMusicProfile: () => void
+  onStartCheckInFresh: () => void
+}
 
-function Results() {
+function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
+  const mountSnapshot = useMemo(() => tryHydrateResultsSnapshotSync(), [])
+  const resumeFullSnapshotRef = useRef(mountSnapshot.resumeFullSnapshot)
+
   const [profile, setProfile] = useState<{
     baseline: MusicBaseline | null
     currEmotContext: CurrEmotContext | null
@@ -290,18 +502,22 @@ function Results() {
     }
   }, [])
 
-  const [claudeRes, setClaudeRes] = useState<any>(null)
+  const [claudeRes, setClaudeRes] = useState<any>(() => mountSnapshot.claude)
   // const [previews, setPreviews] = useState<any[]>([])
 
   const [insightLoadingL1, setInsightLoadingL1] = useState(false)
   const [insightLoadingL2, setInsightLoadingL2] = useState(false)
   const [insightLoadingRotator, setInsightLoadingRotator] = useState(false)
 
-  const [revealMirrorTitle, setRevealMirrorTitle] = useState(false)
-  const [revealMirrorInsight, setRevealMirrorInsight] = useState(false)
+  const [revealMirrorTitle, setRevealMirrorTitle] = useState(
+    () => mountSnapshot.resumeFullSnapshot && !!mountSnapshot.claude,
+  )
+  const [revealMirrorInsight, setRevealMirrorInsight] = useState(
+    () => mountSnapshot.resumeFullSnapshot && !!mountSnapshot.claude,
+  )
 
-  const [journeySongs, setJourneySongs] = useState<any[]>([])
-  const [journeySongsLoading, setJourneySongsLoading] = useState(false)
+  const [journeySongs, setJourneySongs] = useState<any[]>(() => mountSnapshot.journeySongs)
+  const [journeySongsLoading, setJourneySongsLoading] = useState(() => mountSnapshot.journeySongsLoading)
 
   const [playlistWhyExpanded, setPlaylistWhyExpanded] = useState(false)
   const playlistWhyTriggerId = useId()
@@ -311,19 +527,23 @@ function Results() {
   const [journeySnapIndex, setJourneySnapIndex] = useState(0)
 
   const playlistSectionRef = useRef<HTMLElement>(null)
+  const playlistReadyCtaRef = useRef<HTMLDivElement>(null)
   const playlistRevealHandledRef = useRef(false)
   const playlistStaggerTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
 
   const [journeyLinesAllowed, setJourneyLinesAllowed] = useState(false)
   /** Opacity entrance for journey lines (starts false each time the block mounts). */
   const [journeyLinesEntered, setJourneyLinesEntered] = useState(false)
-  const [playlistRevealButtonReady, setPlaylistRevealButtonReady] = useState(false)
-  const [playlistRevealAllowed, setPlaylistRevealAllowed] = useState(false)
-  const [playlistCtaEntered, setPlaylistCtaEntered] = useState(false)
+  const [playlistRevealButtonReady, setPlaylistRevealButtonReady] = useState(
+    () => mountSnapshot.resumeFullSnapshot,
+  )
+  const [playlistRevealAllowed, setPlaylistRevealAllowed] = useState(() => mountSnapshot.resumeFullSnapshot)
+  const [playlistCtaEntered, setPlaylistCtaEntered] = useState(() => mountSnapshot.resumeFullSnapshot)
 
-  const [revealPlaylistHeading, setRevealPlaylistHeading] = useState(false)
-  const [revealPlaylistWhy, setRevealPlaylistWhy] = useState(false)
-  const [revealPlaylistCarousel, setRevealPlaylistCarousel] = useState(false)
+  const [revealPlaylistHeading, setRevealPlaylistHeading] = useState(() => mountSnapshot.resumeFullSnapshot)
+  const [revealPlaylistWhy, setRevealPlaylistWhy] = useState(() => mountSnapshot.resumeFullSnapshot)
+  const [revealPlaylistCarousel, setRevealPlaylistCarousel] = useState(() => mountSnapshot.resumeFullSnapshot)
+  const [playlistReadyModalOpen, setPlaylistReadyModalOpen] = useState(false)
 
   const clearPlaylistStaggerTimers = () => {
     for (const id of playlistStaggerTimersRef.current) {
@@ -337,6 +557,12 @@ function Results() {
     setRevealPlaylistWhy(false)
     setRevealPlaylistCarousel(false)
   }
+
+  useLayoutEffect(() => {
+    if (!resumeFullSnapshotRef.current || !claudeRes) return
+    playlistRevealHandledRef.current = true
+    clearPlaylistStaggerTimers()
+  }, [claudeRes])
 
   useEffect(() => {
     if (claudeRes) {
@@ -442,6 +668,10 @@ function Results() {
       setPlaylistRevealAllowed(false)
       return
     }
+    if (resumeFullSnapshotRef.current) {
+      setPlaylistRevealButtonReady(true)
+      return
+    }
     if (journeySongsLoading) {
       setPlaylistRevealButtonReady(false)
       return
@@ -456,6 +686,7 @@ function Results() {
 
   /** Gentle fade-in for the playlist CTA (same pacing idea as journey lines). */
   useLayoutEffect(() => {
+    if (resumeFullSnapshotRef.current) return
     if (!claudeRes || journeySongsLoading || !playlistRevealButtonReady || playlistRevealAllowed) {
       setPlaylistCtaEntered(false)
       return
@@ -489,6 +720,7 @@ function Results() {
       playlistRevealHandledRef.current = false
       clearPlaylistStaggerTimers()
       resetPlaylistReveals()
+      setPlaylistReadyModalOpen(false)
       return
     }
 
@@ -496,6 +728,7 @@ function Results() {
       playlistRevealHandledRef.current = false
       clearPlaylistStaggerTimers()
       resetPlaylistReveals()
+      setPlaylistReadyModalOpen(false)
       return
     }
 
@@ -566,10 +799,71 @@ function Results() {
     }
   }, [claudeRes, playlistRevealAllowed])
 
+  /** Once the carousel is visible, pause then scroll so the italic line and “I’m Ready” land in view. */
+  useEffect(() => {
+    if (resumeFullSnapshotRef.current) return
+    if (!revealPlaylistCarousel || !playlistRevealAllowed || !claudeRes) return
+
+    const rafRef = { current: 0 }
+    const timeoutId = window.setTimeout(() => {
+      const el = playlistReadyCtaRef.current
+      if (!el) return
+
+      const reduced =
+        typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+      const rect = el.getBoundingClientRect()
+      const startY = window.scrollY
+      const targetY = Math.max(0, rect.top + startY - PLAYLIST_SCROLL_MARGIN_PX)
+      const distance = targetY - startY
+
+      if (reduced || Math.abs(distance) < 2) {
+        window.scrollTo({ top: targetY, behavior: "auto" })
+        return
+      }
+
+      const t0 = performance.now()
+      const tick = (now: number) => {
+        const elapsed = now - t0
+        const t = Math.min(1, elapsed / PLAYLIST_READY_CTA_SCROLL_DURATION_MS)
+        const y = startY + distance * easeInOutCubic(t)
+        window.scrollTo(0, y)
+        if (t < 1) {
+          rafRef.current = window.requestAnimationFrame(tick)
+        }
+      }
+      rafRef.current = window.requestAnimationFrame(tick)
+    }, PLAYLIST_READY_CTA_SCROLL_AFTER_MS)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+      window.cancelAnimationFrame(rafRef.current)
+    }
+  }, [revealPlaylistCarousel, playlistRevealAllowed, claudeRes])
+
   useEffect(() => {
     if (!profile) return
 
     const { baseline, currEmotContext } = profile
+    let cancelled = false
+
+    const fingerprint =
+      baseline && currEmotContext ? fingerprintForResultsInputs(baseline, currEmotContext) : null
+
+    if (fingerprint) {
+      const cached = readClaudeCache(fingerprint)
+      if (
+        cached !== null &&
+        typeof cached === "object" &&
+        cached !== null &&
+        "insight" in cached
+      ) {
+        setClaudeRes((prev: any) => prev ?? cached)
+        return
+      }
+    }
+
+    if (claudeRes != null) return
 
     const fetchClaudeResponse = async (retries = 3) => {
       try {
@@ -577,25 +871,29 @@ function Results() {
         console.log("fetch url", url)
         const response = await fetch(url)
         const data = await response.json()
-        const cleaned = data.response.replace(/```json|```/g, '').trim()
+        const cleaned = data.response.replace(/```json|```/g, "").trim()
         console.log("raw response", cleaned)
         const parsed = JSON.parse(cleaned)
-        setClaudeRes(parsed)
+        if (cancelled) return
         console.log("claude response", parsed)
-      }
-      catch (error) {
-        if (retries > 0){
-          console.log('Retrying... ${retries} attempts left')
+        setClaudeRes(parsed)
+        if (fingerprint) writeClaudeCache(fingerprint, parsed)
+      } catch (error) {
+        if (retries > 0) {
+          console.log(`Retrying... ${retries} attempts left`)
           await fetchClaudeResponse(retries - 1)
-        }
-        else{
+        } else {
           console.error("Failed after multiple attempts:", error)
         }
       }
     }
 
     void fetchClaudeResponse()
-  }, [profile])
+
+    return () => {
+      cancelled = true
+    }
+  }, [profile, claudeRes])
 
   useEffect(() => {
     if (!claudeRes) {
@@ -606,6 +904,14 @@ function Results() {
 
     const reduced =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (resumeFullSnapshotRef.current) {
+      queueMicrotask(() => {
+        setRevealMirrorTitle(true)
+        setRevealMirrorInsight(true)
+      })
+      return undefined
+    }
 
     setRevealMirrorTitle(false)
     setRevealMirrorInsight(false)
@@ -631,6 +937,8 @@ function Results() {
 
   useEffect(() => {
     if (!claudeRes) return
+
+    if (resumeFullSnapshotRef.current) return
 
     let cancelled = false
     setJourneySongsLoading(true)
@@ -690,12 +998,14 @@ function Results() {
     }
 
     const run = async () => {
+      let journeyWithPreviews: any[] = []
       try {
         const verifyJourneySongs = await verifySongs(claudeRes.journeySongs ?? [])
         if (cancelled) return
-        const journeyWithPreviews = await handleSongPreview(verifyJourneySongs)
+        journeyWithPreviews = await handleSongPreview(verifyJourneySongs)
         if (cancelled) return
         setJourneySongs(journeyWithPreviews)
+        writeResultsCacheWithCurrentStorage(claudeRes, journeyWithPreviews)
       } finally {
         if (!cancelled) setJourneySongsLoading(false)
       }
@@ -724,7 +1034,7 @@ function Results() {
     for (const song of songs){
       const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
       const response = await fetch(
-        `https://itunes.apple.com/search?term=${song.title}+${cleanArtist}&media=music&entity=song&limit=1`
+        `/itunes/search?term=${song.title}+${cleanArtist}&media=music&entity=song&limit=1`
       )
       const data = await response.json()
       const result = data.results[0]
@@ -958,6 +1268,53 @@ function Results() {
                   )}
                 </div>
               </div>
+              {revealPlaylistCarousel ? (
+                <div
+                  ref={playlistReadyCtaRef}
+                  className="mt-12 flex flex-col items-center gap-6 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms] sm:mt-14"
+                >
+                  <p className="max-w-md text-[0.9375rem] text-muted-foreground italic leading-relaxed sm:text-base">
+                    Ready for a new playlist? Start with another quick check-in.
+                  </p>
+                  <Button type="button" size="lg" onClick={() => setPlaylistReadyModalOpen(true)}>
+                    I&apos;m Ready
+                  </Button>
+                </div>
+              ) : null}
+              <Dialog open={playlistReadyModalOpen} onOpenChange={setPlaylistReadyModalOpen}>
+                <DialogContent className="flex min-h-[22rem] flex-col items-center justify-center gap-8 py-8 text-center sm:max-w-lg sm:min-h-[26rem]">
+                  <DialogHeader className="flex w-full max-w-full flex-col items-center gap-4 text-center">
+                    <DialogTitle className="sr-only">Check-in options</DialogTitle>
+                    <p className="max-w-[17.5rem] shrink-0 self-center text-center text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground italic sm:max-w-xs sm:text-base">
+                      Your next playlist starts with how you&apos;re feeling now. Want to update your
+                      music profile first, or jump straight into your check-in?
+                    </p>
+                  </DialogHeader>
+                  <div className="flex shrink-0 flex-row flex-wrap justify-center gap-3 self-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11"
+                      onClick={() => {
+                        setPlaylistReadyModalOpen(false)
+                        onRebuildMusicProfile()
+                      }}
+                    >
+                      Update My Profile
+                    </Button>
+                    <Button
+                      type="button"
+                      className="min-h-11"
+                      onClick={() => {
+                        setPlaylistReadyModalOpen(false)
+                        onStartCheckInFresh()
+                      }}
+                    >
+                      Start Check-In
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </section>
           ) : null}
         </>

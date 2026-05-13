@@ -1,10 +1,64 @@
 import QuestionBlock from "../components/QuestionBlock"
-import QuestionStageLayout from "../components/QuestionStageLayout"
+import QuestionStageLayout, {
+    QUESTION_HINT_AUTO_HIDE_MS,
+    QUESTION_REQUIRED_FOOTER_HINT,
+} from "../components/QuestionStageLayout"
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 
+import type { MusicBaseline } from "../lib/reccobeatsEnrich"
+
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
+
+type StoredArtistHydration = { id: string; name: string; imageUrl: string }
+type StoredTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
+
+function artistsFromBaselineStored(favArtists: MusicBaseline["favArtists"]): StoredArtistHydration[] {
+    const out: StoredArtistHydration[] = []
+    for (let i = 0; i < favArtists.length; i++) {
+        const a = favArtists[i]
+        if (typeof a === "string") {
+            const name = a.trim()
+            if (!name) continue
+            out.push({ id: `legacy-artist:${i}:${name}`, name, imageUrl: "" })
+        } else if (a && typeof a === "object" && "name" in a && typeof a.name === "string") {
+            const id =
+                "id" in a && typeof (a as { id?: string }).id === "string" && (a as { id: string }).id
+                    ? (a as { id: string }).id
+                    : `legacy-artist:${i}:${a.name}`
+            const imageUrl =
+                "imageUrl" in a && typeof (a as { imageUrl?: string }).imageUrl === "string"
+                    ? (a as { imageUrl: string }).imageUrl
+                    : ""
+            out.push({ id, name: a.name, imageUrl })
+        }
+    }
+    return out
+}
+
+function tracksFromBaselineStored(favTracks: MusicBaseline["favTracks"]): StoredTrackHydration[] {
+    const out: StoredTrackHydration[] = []
+    const rows = Array.isArray(favTracks) ? favTracks : []
+    for (const row of rows) {
+        if (!Array.isArray(row) || row.length < 3) continue
+        const name = row[0]
+        const artists = row[1]
+        const id = row[2]
+        if (typeof name !== "string" || !Array.isArray(artists) || typeof id !== "string") continue
+        let imageUrl = ""
+        if (row.length >= 4 && typeof row[3] === "string" && row[3].length > 0) {
+            imageUrl = row[3]
+        }
+        out.push({
+            id,
+            name,
+            artists: artists as string[],
+            imageUrl,
+        })
+    }
+    return out
+}
 
 /** Pause before the first sentence begins to fade in. */
 const WELCOME_INTRO_STILLNESS_MS = 500
@@ -18,10 +72,12 @@ const PREP_SCREEN_EXIT_FADE_MS = 500
 const WELCOME_LINE_FADE_MS = 900
 
 interface OnboardingProps {
-    setView: (view: string) => void;
+    setView: (view: string) => void
+    /** Opens the questionnaire at question 1 (favorite genres); skips welcome and prep screens. */
+    startAtMusicProfileQuestions?: boolean
 }
 
-function Onboarding({setView}: OnboardingProps) {
+function Onboarding({ setView, startAtMusicProfileQuestions = false }: OnboardingProps) {
     type ArtistOption = {
         id: string
         name: string
@@ -239,11 +295,12 @@ function Onboarding({setView}: OnboardingProps) {
     const [listGenres, setListGenres] = useState<string[]>([])
     const [listContexts, setListContexts] = useState<string[]>([])
     const [additionalContext, setAdditionalContext] = useState<string>("")
-    const [showWelcomeScreen, setShowWelcomeScreen] = useState(true)
+    const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => !startAtMusicProfileQuestions)
     const [showPrepScreen, setShowPrepScreen] = useState(false)
     /** After the last taste question, before saving baseline and opening check-in. */
     const [showMusicToMoodBridgeScreen, setShowMusicToMoodBridgeScreen] = useState(false)
     const [currentQuestion, setCurrentQuestion] = useState(0)
+    const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
 
     /** True while prep is fading out toward the questionnaire. */
     const [prepIsExitingToQuestions, setPrepIsExitingToQuestions] = useState(false)
@@ -254,6 +311,41 @@ function Onboarding({setView}: OnboardingProps) {
     const [revealWelcomeFirst, setRevealWelcomeFirst] = useState(false)
     const [revealWelcomeSecond, setRevealWelcomeSecond] = useState(false)
     const [revealWelcomeCta, setRevealWelcomeCta] = useState(false)
+
+    useLayoutEffect(() => {
+        if (!startAtMusicProfileQuestions) return
+        const raw = localStorage.getItem("musicBaseline")
+        if (!raw) return
+        let baseline: MusicBaseline
+        try {
+            baseline = JSON.parse(raw) as MusicBaseline
+        } catch {
+            return
+        }
+        if (!baseline || typeof baseline !== "object") return
+
+        if (Array.isArray(baseline.favGenres)) {
+            setListGenres([...baseline.favGenres])
+        }
+        if (Array.isArray(baseline.personalContexts)) {
+            setListContexts([...baseline.personalContexts])
+        }
+        if (typeof baseline.addContext === "string") {
+            setAdditionalContext(baseline.addContext)
+        }
+        setListOfArtists(artistsFromBaselineStored(baseline.favArtists ?? []) as ArtistOption[])
+        setListOfTracks(tracksFromBaselineStored(baseline.favTracks ?? []) as TrackOption[])
+    }, [startAtMusicProfileQuestions])
+
+    useEffect(() => {
+        setNextBlockedHint(null)
+    }, [currentQuestion])
+
+    useEffect(() => {
+        if (!nextBlockedHint) return
+        const id = window.setTimeout(() => setNextBlockedHint(null), QUESTION_HINT_AUTO_HIDE_MS)
+        return () => window.clearTimeout(id)
+    }, [nextBlockedHint])
 
     useEffect(() => {
         if (!showWelcomeScreen) {
@@ -483,7 +575,11 @@ function Onboarding({setView}: OnboardingProps) {
                 name: artist.name,
                 imageUrl: artist.imageUrl,
             })),
-            favTracks: listOfTracks.map(track => [track.name, track.artists, track.id] as [string, string[], string]),
+            favTracks: listOfTracks.map((track) => {
+                const row: unknown[] = [track.name, track.artists, track.id]
+                if (track.imageUrl) row.push(track.imageUrl)
+                return row
+            }),
             favGenres: listGenres,
             personalContexts: listContexts,
             addContext: additionalContext
@@ -494,6 +590,24 @@ function Onboarding({setView}: OnboardingProps) {
 
     const totalQuestions = 5
     const isLastQuestion = currentQuestion === totalQuestions - 1
+
+    /** Question index 4 is optional ("anything else"); others require at least one answer. */
+    const isMusicProfileQuestionAnswered = (q: number): boolean => {
+        switch (q) {
+            case 0:
+                return listGenres.length > 0
+            case 1:
+                return listOfArtists.length > 0
+            case 2:
+                return listOfTracks.length > 0
+            case 3:
+                return listContexts.length > 0
+            case 4:
+                return true
+            default:
+                return true
+        }
+    }
 
     const handleNext = () => {
         if (showWelcomeScreen) {
@@ -520,6 +634,12 @@ function Onboarding({setView}: OnboardingProps) {
             }, PREP_SCREEN_EXIT_FADE_MS)
             return
         }
+
+        if (!isMusicProfileQuestionAnswered(currentQuestion)) {
+            setNextBlockedHint(QUESTION_REQUIRED_FOOTER_HINT)
+            return
+        }
+        setNextBlockedHint(null)
 
         if (isLastQuestion) {
             setShowMusicToMoodBridgeScreen(true)
@@ -592,7 +712,7 @@ function Onboarding({setView}: OnboardingProps) {
             return (
                 <QuestionBlock
                     kind="search"
-                    prompt="Can you give us a few examples of your favorite songs?"
+                    prompt="What are your most favorite songs of all time?"
                     searchTerm={searchTermTrack}
                     onSearchTermChange={setSearchTermTrack}
                     placeholder="Search for a track..."
@@ -811,6 +931,7 @@ function Onboarding({setView}: OnboardingProps) {
                 onNext={handleNext}
                 isBackDisabled={false}
                 nextLabel={isLastQuestion ? "Done" : "Next"}
+                nextFooterHint={nextBlockedHint}
                 questionKey={`onboarding-question-${currentQuestion}`}
             >
                 {renderCurrentQuestion()}
