@@ -1,4 +1,5 @@
-import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo } from "react"
+import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo, useCallback } from "react"
+import { Check, ClipboardList } from "lucide-react"
 
 import {
   type CarouselApi,
@@ -404,6 +405,18 @@ function CardPreviewBar({
 const CAPTION_FADE_DELAY_MS = 420
 const CAPTION_FADE_DURATION_MS = 900
 
+function formatJourneySongsForClipboard(songs: any[]): string {
+  return songs
+    .map((song, i) => {
+      const title =
+        typeof song?.title === "string" && song.title.trim() ? song.title.trim() : "Unknown track"
+      const artist =
+        typeof song?.artist === "string" && song.artist.trim() ? song.artist.trim() : "Unknown artist"
+      return `${i + 1}. ${title} — ${artist}`
+    })
+    .join("\n")
+}
+
 function JourneySlide({
   song,
   isSelected,
@@ -525,6 +538,52 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
 
   const [journeyCarouselApi, setJourneyCarouselApi] = useState<CarouselApi | null>(null)
   const [journeySnapIndex, setJourneySnapIndex] = useState(0)
+  const [playlistListCopied, setPlaylistListCopied] = useState(false)
+  const [playlistCopyFailed, setPlaylistCopyFailed] = useState(false)
+  const playlistCopyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const playlistClipboardText = useMemo(
+    () => formatJourneySongsForClipboard(journeySongs),
+    [journeySongs],
+  )
+
+  useEffect(() => {
+    setPlaylistListCopied(false)
+    setPlaylistCopyFailed(false)
+    if (playlistCopyResetTimerRef.current) {
+      window.clearTimeout(playlistCopyResetTimerRef.current)
+      playlistCopyResetTimerRef.current = null
+    }
+  }, [journeySongs])
+
+  useEffect(() => {
+    return () => {
+      if (playlistCopyResetTimerRef.current) {
+        window.clearTimeout(playlistCopyResetTimerRef.current)
+      }
+    }
+  }, [])
+
+  const handleCopyPlaylistList = useCallback(async () => {
+    if (!playlistClipboardText.trim()) return
+    if (playlistCopyResetTimerRef.current) {
+      window.clearTimeout(playlistCopyResetTimerRef.current)
+      playlistCopyResetTimerRef.current = null
+    }
+    try {
+      await navigator.clipboard.writeText(playlistClipboardText)
+      setPlaylistCopyFailed(false)
+      setPlaylistListCopied(true)
+    } catch {
+      setPlaylistListCopied(false)
+      setPlaylistCopyFailed(true)
+    }
+    playlistCopyResetTimerRef.current = window.setTimeout(() => {
+      setPlaylistListCopied(false)
+      setPlaylistCopyFailed(false)
+      playlistCopyResetTimerRef.current = null
+    }, 2500)
+  }, [playlistClipboardText])
 
   const playlistSectionRef = useRef<HTMLElement>(null)
   const playlistReadyCtaRef = useRef<HTMLDivElement>(null)
@@ -1246,23 +1305,57 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
                   )}
                 >
                   {journeySongs.length > 0 ? (
-                    <Carousel
-                      opts={{ align: "center", loop: false }}
-                      className="w-full max-w-full"
-                      setApi={setJourneyCarouselApi}
-                    >
-                      <CarouselContent>
-                        {journeySongs.map((song: any, i: number) => (
-                          <CarouselItem key={`journey-${i}-${song.title}-${song.artist}`}>
-                            <div className="flex justify-center py-3">
-                              <JourneySlide song={song} isSelected={i === journeySnapIndex} />
-                            </div>
-                          </CarouselItem>
-                        ))}
-                      </CarouselContent>
-                      <CarouselPrevious className="left-0 border-border bg-background/90 shadow-sm sm:left-1" />
-                      <CarouselNext className="right-0 border-border bg-background/90 shadow-sm sm:right-1" />
-                    </Carousel>
+                    <>
+                      <Carousel
+                        opts={{ align: "center", loop: false }}
+                        className="w-full max-w-full"
+                        setApi={setJourneyCarouselApi}
+                      >
+                        <CarouselContent>
+                          {journeySongs.map((song: any, i: number) => (
+                            <CarouselItem key={`journey-${i}-${song.title}-${song.artist}`}>
+                              <div className="flex justify-center py-3">
+                                <JourneySlide song={song} isSelected={i === journeySnapIndex} />
+                              </div>
+                            </CarouselItem>
+                          ))}
+                        </CarouselContent>
+                        <CarouselPrevious className="left-0 border-border bg-background/90 shadow-sm sm:left-1" />
+                        <CarouselNext className="right-0 border-border bg-background/90 shadow-sm sm:right-1" />
+                      </Carousel>
+                      <div className="mt-4 flex flex-col items-center gap-1.5 sm:mt-5">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => void handleCopyPlaylistList()}
+                          aria-label="Copy playlist as a plain text list of songs"
+                        >
+                          {playlistListCopied ? (
+                            <Check className="size-4 shrink-0" aria-hidden />
+                          ) : (
+                            <ClipboardList className="size-4 shrink-0" aria-hidden />
+                          )}
+                          {playlistListCopied
+                            ? "Copied!"
+                            : playlistCopyFailed
+                              ? "Copy failed — try again"
+                              : "Copy song list"}
+                        </Button>
+                        <p
+                          className="min-h-[1.25rem] text-center text-xs text-muted-foreground"
+                          aria-live="polite"
+                          role="status"
+                        >
+                          {playlistListCopied
+                            ? "Song list copied to your clipboard."
+                            : playlistCopyFailed
+                              ? "Clipboard access was blocked. You can try again or copy manually."
+                              : "\u00a0"}
+                        </p>
+                      </div>
+                    </>
                   ) : (
                     <p className="text-sm text-muted-foreground">No songs matched for this journey.</p>
                   )}

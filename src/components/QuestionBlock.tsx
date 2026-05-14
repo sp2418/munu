@@ -86,7 +86,7 @@ function QuestionBlock(props: QuestionBlockProps) {
         {props.kind === "search" && (
           <Command
             shouldFilter={false}
-            className={`mt-2 p-0 text-left transition-all duration-500 [&_[data-slot=command-input-wrapper]]:p-0 ${
+            className={`mt-2 bg-background p-0 text-left text-foreground transition-all duration-500 [&_[data-slot=command-input-wrapper]]:p-0 ${
               showRightContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
             }`}
           >
