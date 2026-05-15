@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-
+import { Analytics } from "@vercel/analytics/react"
 import './App.css'
 import Onboarding from './stages/Onboarding'
 import CheckIn from './stages/Check-In'
@@ -62,6 +62,7 @@ function App() {
 
   return (
     <div>
+      <Analytics />
       {currentView === "onboarding" && (
         <Onboarding
           setView={setCurrentView}
