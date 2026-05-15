@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk"
 
 type CurrTrack =
     | [string, string[]]
@@ -116,6 +116,52 @@ interface handleClaude {
         currTracks: CurrTrack[],
         emotions: string[]
     };
+}
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function httpStatusFromError(err: unknown): number | undefined {
+    if (typeof err !== "object" || err === null) return undefined
+    const status = (err as { status?: unknown }).status
+    return typeof status === "number" ? status : undefined
+}
+
+/** Anthropic / edge: overload, rate limit, transient server errors */
+function isRetryableAnthropicHttpStatus(status: number): boolean {
+    return status === 429 || status === 500 || status === 503 || status === 529
+}
+
+/**
+ * Retries on retryable HTTP statuses with exponential backoff + jitter
+ * (matches Anthropic console guidance for 529 Overloaded).
+ */
+async function withAnthropicBackoff<T>(
+    fn: () => Promise<T>,
+    options: { maxRetries: number; baseDelayMs: number; maxDelayMs: number },
+): Promise<T> {
+    const { maxRetries, baseDelayMs, maxDelayMs } = options
+    let lastError: unknown
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await fn()
+        } catch (err) {
+            lastError = err
+            const status = httpStatusFromError(err)
+            const retryable = status !== undefined && isRetryableAnthropicHttpStatus(status)
+            if (!retryable || attempt >= maxRetries) {
+                throw err
+            }
+            const capped = Math.min(maxDelayMs, baseDelayMs * 2 ** attempt)
+            const jitter = Math.floor(Math.random() * 400)
+            console.warn(
+                `[claude] retryable error status=${status} attempt=${attempt + 1}/${maxRetries + 1} sleeping_ms=${capped + jitter}`,
+            )
+            await delay(capped + jitter)
+        }
+    }
+    throw lastError
 }
 
 export default async function handleClaude(req: VercelRequest, res: VercelResponse) {
@@ -238,18 +284,43 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
     console.log("prompt", prompt)
 
     const client = new Anthropic({
-        apiKey: claudeAPIKey // This is the default and can be omitted
-      });
-      const msg = await client.messages.create({
-        model: "claude-opus-4-7",
-        max_tokens: 4096,
-        messages: [{
-          role: "user",
-          content: prompt
-        }],
-      });
-      const response = msg.content[0]
-      if (response.type === "text"){
-        res.status(200).json({response: response.text})
-      }
+        apiKey: claudeAPIKey,
+    })
+
+    try {
+        const msg = await withAnthropicBackoff(
+            () =>
+                client.messages.create({
+                    model: "claude-opus-4-7",
+                    max_tokens: 4096,
+                    messages: [
+                        {
+                            role: "user",
+                            content: prompt,
+                        },
+                    ],
+                }),
+            { maxRetries: 4, baseDelayMs: 1000, maxDelayMs: 20_000 },
+        )
+
+        const block = msg.content[0]
+        if (block?.type === "text") {
+            return res.status(200).json({ response: block.text })
+        }
+        console.error("[claude] unexpected content block:", block?.type)
+        return res.status(500).json({ error: "Unexpected response shape from model" })
+    } catch (err) {
+        const status = httpStatusFromError(err)
+        console.error("[claude] messages.create failed:", err)
+        if (status !== undefined && isRetryableAnthropicHttpStatus(status)) {
+            return res.status(503).json({
+                error: "Model temporarily unavailable. Please try again in a moment.",
+                code: status,
+            })
+        }
+        return res.status(502).json({
+            error: "Failed to generate response.",
+            ...(status !== undefined ? { code: status } : {}),
+        })
+    }
 }

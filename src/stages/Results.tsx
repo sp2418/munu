@@ -516,6 +516,9 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
   }, [])
 
   const [claudeRes, setClaudeRes] = useState<any>(() => mountSnapshot.claude)
+  /** Shown when /api/claude fails after retries; bump `claudeRetryTick` to retry. */
+  const [claudeInsightError, setClaudeInsightError] = useState<string | null>(null)
+  const [claudeRetryTick, setClaudeRetryTick] = useState(0)
   // const [previews, setPreviews] = useState<any[]>([])
 
   const [insightLoadingL1, setInsightLoadingL1] = useState(false)
@@ -918,32 +921,77 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
         "insight" in cached
       ) {
         setClaudeRes((prev: any) => prev ?? cached)
+        setClaudeInsightError(null)
         return
       }
     }
 
     if (claudeRes != null) return
 
-    const fetchClaudeResponse = async (retries = 3) => {
+    let lastHttpStatus: number | undefined
+
+    const claudeBackoffMs = (attempt: number) =>
+      Math.min(16_000, 1_000 * 2 ** attempt) + Math.floor(Math.random() * 400)
+
+    const fetchClaudeResponse = async (attempt = 0, maxAttempts = 4) => {
+      if (!cancelled) setClaudeInsightError(null)
       try {
         const url = `/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`
         console.log("fetch url", url)
         const response = await fetch(url)
-        const data = await response.json()
+        const data = (await response.json()) as { response?: string; error?: string }
+
+        if (!response.ok) {
+          lastHttpStatus = response.status
+          const retryable =
+            response.status === 429 ||
+            response.status === 502 ||
+            response.status === 503 ||
+            response.status === 529
+          if (retryable && attempt < maxAttempts - 1) {
+            const wait = claudeBackoffMs(attempt)
+            console.warn(`Claude request ${response.status}; retrying in ${wait}ms (${attempt + 1}/${maxAttempts})`)
+            await new Promise((r) => setTimeout(r, wait))
+            if (cancelled) return
+            return fetchClaudeResponse(attempt + 1, maxAttempts)
+          }
+          throw new Error(data.error ?? `HTTP ${response.status}`)
+        }
+
+        if (typeof data.response !== "string") {
+          throw new Error(data.error ?? "Missing model response")
+        }
+
         const cleaned = data.response.replace(/```json|```/g, "").trim()
         console.log("raw response", cleaned)
         const parsed = JSON.parse(cleaned)
         if (cancelled) return
         console.log("claude response", parsed)
         setClaudeRes(parsed)
+        setClaudeInsightError(null)
         if (fingerprint) writeClaudeCache(fingerprint, parsed)
       } catch (error) {
-        if (retries > 0) {
-          console.log(`Retrying... ${retries} attempts left`)
-          await fetchClaudeResponse(retries - 1)
-        } else {
-          console.error("Failed after multiple attempts:", error)
+        if (attempt < maxAttempts - 1) {
+          const wait = claudeBackoffMs(attempt)
+          console.warn(`Claude fetch failed; retrying in ${wait}ms (${attempt + 1}/${maxAttempts})`, error)
+          await new Promise((r) => setTimeout(r, wait))
+          if (cancelled) return
+          return fetchClaudeResponse(attempt + 1, maxAttempts)
         }
+        console.error("Failed after multiple attempts:", error)
+        if (cancelled) return
+        const statusOverload =
+          lastHttpStatus === 429 ||
+          lastHttpStatus === 502 ||
+          lastHttpStatus === 503 ||
+          lastHttpStatus === 529
+        const messageOverload =
+          error instanceof Error && /temporarily unavailable/i.test(error.message)
+        const userMessage =
+          statusOverload || messageOverload
+            ? "The AI that helps to curate your results is temporarily overloaded or unavailable on their side. Please try again in a minute or two."
+            : "We couldn’t finish building your insights. Check your connection, try again, or refresh the page."
+        setClaudeInsightError(userMessage)
       }
     }
 
@@ -952,7 +1000,7 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
     return () => {
       cancelled = true
     }
-  }, [profile, claudeRes])
+  }, [profile, claudeRes, claudeRetryTick])
 
   useEffect(() => {
     if (!claudeRes) {
@@ -1135,23 +1183,43 @@ function Results({ onRebuildMusicProfile, onStartCheckInFresh }: ResultsProps) {
     <div className="flex min-h-svh flex-col px-6 py-10">
       {!claudeRes ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-10 px-4 text-center">
-          <div aria-live="polite" className="mx-auto w-full max-w-prose space-y-2">
-            <p className={insightLoadingLineFadeClass(insightLoadingL1)}>Thanks for sharing.</p>
-            <p className={insightLoadingLineFadeClass(insightLoadingL2)}>
-              Hang tight while we put together something for you.
-            </p>
-          </div>
-          <div
-            className={cn(
-              "mx-auto w-full max-w-lg transition-opacity ease-out motion-reduce:transition-none",
-              "motion-safe:duration-[900ms]",
-              insightLoadingRotator
-                ? "opacity-100"
-                : "pointer-events-none opacity-0 motion-reduce:opacity-100",
-            )}
-          >
-            <RotatingLoadingLines lines={INSIGHT_LOADING_LINES} active={insightLoadingRotator && !claudeRes} />
-          </div>
+          {claudeInsightError ? (
+            <div aria-live="assertive" className="mx-auto flex w-full max-w-md flex-col items-center gap-5">
+              <p className="text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground sm:text-base">
+                {claudeInsightError}
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setClaudeInsightError(null)
+                  setClaudeRetryTick((t) => t + 1)
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div aria-live="polite" className="mx-auto w-full max-w-prose space-y-2">
+                <p className={insightLoadingLineFadeClass(insightLoadingL1)}>Thanks for sharing.</p>
+                <p className={insightLoadingLineFadeClass(insightLoadingL2)}>
+                  Hang tight while we put together something for you.
+                </p>
+              </div>
+              <div
+                className={cn(
+                  "mx-auto w-full max-w-lg transition-opacity ease-out motion-reduce:transition-none",
+                  "motion-safe:duration-[900ms]",
+                  insightLoadingRotator
+                    ? "opacity-100"
+                    : "pointer-events-none opacity-0 motion-reduce:opacity-100",
+                )}
+              >
+                <RotatingLoadingLines lines={INSIGHT_LOADING_LINES} active={insightLoadingRotator && !claudeRes} />
+              </div>
+            </>
+          )}
         </div>
       ) : null}
       {claudeRes ? (
