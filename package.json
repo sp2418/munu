@@ -7,6 +7,8 @@
     "dev": "vite",
     "dev:api": "vercel dev --listen 127.0.0.1:3001",
     "build": "tsc -b && vite build",
+    "bake:vivi": "tsx scripts/bake-vivi-storage.mjs",
+    "bake:vivi-results": "tsx scripts/bake-vivi-results.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

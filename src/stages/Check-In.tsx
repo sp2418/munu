@@ -6,6 +6,20 @@ import QuestionStageLayout, {
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 import type { CurrEmotContext } from "../lib/reccobeatsEnrich"
 
+import { useFollowAlongPersona } from "../context/FollowAlongPersonaContext"
+import {
+    readCheckInScreenProgress,
+    writeAppProgress,
+    writeCheckInScreenProgress,
+} from "../lib/appProgressStorage"
+import {
+    clearCheckInDraft,
+    readCheckInDraftOrStorage,
+    writeCheckInDraft,
+} from "../lib/checkInDraftStorage"
+import { writeViviBakedResultsCache } from "../lib/resultsCache"
+import { getViviDraftCheckIn } from "../lib/viviWalkthroughStorage"
+
 import { useState, useEffect } from "react"
 
 type CheckInTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
@@ -46,9 +60,12 @@ interface CheckInProps {
 }
 
 function CheckIn({setView}: CheckInProps) {
+    const followAlong = useFollowAlongPersona()
     const [rantSesh, setRantSesh] = useState<string>("")
     const [listEmotions, setListEmotions] = useState<string[]>([])
-    const [currentQuestion, setCurrentQuestion] = useState(0)
+    const [currentQuestion, setCurrentQuestion] = useState(
+        () => readCheckInScreenProgress()?.currentQuestion ?? 0,
+    )
     const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
 
     const handleRantSession = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -205,28 +222,46 @@ function CheckIn({setView}: CheckInProps) {
     }, [currentQuestion])
 
     useEffect(() => {
+        writeAppProgress({ view: "checkin" })
+    }, [])
+
+    useEffect(() => {
+        writeCheckInScreenProgress({ currentQuestion })
+    }, [currentQuestion])
+
+    useEffect(() => {
         if (!nextBlockedHint) return
         const id = window.setTimeout(() => setNextBlockedHint(null), QUESTION_HINT_AUTO_HIDE_MS)
         return () => window.clearTimeout(id)
     }, [nextBlockedHint])
 
     useEffect(() => {
-        const raw = localStorage.getItem("currEmotContext")
-        if (!raw) return
-        let parsed: CurrEmotContext
-        try {
-            parsed = JSON.parse(raw) as CurrEmotContext
-        } catch {
+        if (followAlong.walkthroughActive) {
+            const ci = getViviDraftCheckIn()
+            setRantSesh(ci.currRant)
+            setListEmotions([...ci.emotions])
+            setListOfTracks(checkInTracksFromPersisted(ci.currTracks))
             return
         }
-        if (typeof parsed.currRant === "string") {
-            setRantSesh(parsed.currRant)
-        }
-        if (Array.isArray(parsed.emotions)) {
-            setListEmotions([...parsed.emotions])
-        }
-        setListOfTracks(checkInTracksFromPersisted(parsed.currTracks))
-    }, [])
+
+        const draft = readCheckInDraftOrStorage()
+        if (!draft) return
+        setRantSesh(draft.currRant)
+        setListEmotions([...draft.emotions])
+        setListOfTracks(draft.currTracks)
+    }, [followAlong.walkthroughActive])
+
+    useEffect(() => {
+        if (followAlong.walkthroughActive) return
+        const timer = window.setTimeout(() => {
+            writeCheckInDraft({
+                currRant: rantSesh,
+                emotions: listEmotions,
+                currTracks: listOfTracks,
+            })
+        }, 400)
+        return () => window.clearTimeout(timer)
+    }, [followAlong.walkthroughActive, rantSesh, listEmotions, listOfTracks])
 
     const handleAddTrack = (track: CheckInTrack) => {
         if (!listOfTracks.some((t) => t.id === track.id)) {
@@ -250,6 +285,10 @@ function CheckIn({setView}: CheckInProps) {
             currRant: rantSesh
         }
         localStorage.setItem('currEmotContext', JSON.stringify(currEmotContext))
+        clearCheckInDraft()
+        if (followAlong.walkthroughActive) {
+            writeViviBakedResultsCache()
+        }
         setView("results")
     }
 
@@ -288,6 +327,8 @@ function CheckIn({setView}: CheckInProps) {
     }
 
     const renderCurrentQuestion = () => {
+        const followAlongLocked = followAlong.walkthroughActive
+
         if (currentQuestion === 0) {
             return (
                 <QuestionBlock
@@ -295,6 +336,7 @@ function CheckIn({setView}: CheckInProps) {
                     prompt="What's been on your mind lately?"
                     value={rantSesh}
                     onChange={handleRantSession}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -307,6 +349,7 @@ function CheckIn({setView}: CheckInProps) {
                     options={emotions}
                     selectedValues={listEmotions}
                     onToggle={handleAddEmotion}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -332,6 +375,7 @@ function CheckIn({setView}: CheckInProps) {
                     imageUrl: track.imageUrl,
                 }))}
                 onRemoveSelectedItem={handleRemoveTrack}
+                interactionLocked={followAlongLocked}
             />
         )
     }

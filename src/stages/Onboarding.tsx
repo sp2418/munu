@@ -9,7 +9,64 @@ import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 
 import type { MusicBaseline } from "../lib/reccobeatsEnrich"
 
+import viviImage from "../assets/vivi.jpg"
+import { ArrowRight } from "lucide-react"
+
+import { useFollowAlongPersona } from "../context/FollowAlongPersonaContext"
+import {
+    readOnboardingScreenProgress,
+    writeAppProgress,
+    writeOnboardingScreenProgress,
+} from "../lib/appProgressStorage"
+import {
+    clearOnboardingDraft,
+    readOnboardingDraftOrBaseline,
+    writeOnboardingDraft,
+} from "../lib/onboardingDraftStorage"
+import { getViviDraftBaseline, isViviWalkthroughActive } from "../lib/viviWalkthroughStorage"
+
 import { useState, useEffect, useLayoutEffect, useRef } from "react"
+
+function initialOnboardingScreens(startAtMusicProfileQuestions: boolean) {
+    const noSavedProfile =
+        typeof localStorage !== "undefined" && !localStorage.getItem("musicBaseline")
+    if (noSavedProfile && !isViviWalkthroughActive() && !startAtMusicProfileQuestions) {
+        return {
+            showWelcomeScreen: true,
+            showDemoScreen: false,
+            showPrepScreen: false,
+            showMusicToMoodBridgeScreen: false,
+            currentQuestion: 0,
+        }
+    }
+
+    const saved = readOnboardingScreenProgress()
+    if (startAtMusicProfileQuestions) {
+        return {
+            showWelcomeScreen: false,
+            showDemoScreen: false,
+            showPrepScreen: false,
+            showMusicToMoodBridgeScreen: false,
+            currentQuestion: saved?.currentQuestion ?? 0,
+        }
+    }
+    if (saved) {
+        return {
+            showWelcomeScreen: saved.showWelcomeScreen,
+            showDemoScreen: saved.showDemoScreen,
+            showPrepScreen: saved.showPrepScreen,
+            showMusicToMoodBridgeScreen: saved.showMusicToMoodBridgeScreen,
+            currentQuestion: saved.currentQuestion,
+        }
+    }
+    return {
+        showWelcomeScreen: true,
+        showDemoScreen: false,
+        showPrepScreen: false,
+        showMusicToMoodBridgeScreen: false,
+        currentQuestion: 0,
+    }
+}
 
 type StoredArtistHydration = { id: string; name: string; imageUrl: string }
 type StoredTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
@@ -78,6 +135,8 @@ interface OnboardingProps {
 }
 
 function Onboarding({ setView, startAtMusicProfileQuestions = false }: OnboardingProps) {
+    const followAlong = useFollowAlongPersona()
+    const initialScreens = initialOnboardingScreens(startAtMusicProfileQuestions)
     type ArtistOption = {
         id: string
         name: string
@@ -295,11 +354,14 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     const [listGenres, setListGenres] = useState<string[]>([])
     const [listContexts, setListContexts] = useState<string[]>([])
     const [additionalContext, setAdditionalContext] = useState<string>("")
-    const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => !startAtMusicProfileQuestions)
-    const [showPrepScreen, setShowPrepScreen] = useState(false)
+    const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => initialScreens.showWelcomeScreen)
+    const [showDemoScreen, setShowDemoScreen] = useState(() => initialScreens.showDemoScreen)
+    const [showPrepScreen, setShowPrepScreen] = useState(() => initialScreens.showPrepScreen)
     /** After the last taste question, before saving baseline and opening check-in. */
-    const [showMusicToMoodBridgeScreen, setShowMusicToMoodBridgeScreen] = useState(false)
-    const [currentQuestion, setCurrentQuestion] = useState(0)
+    const [showMusicToMoodBridgeScreen, setShowMusicToMoodBridgeScreen] = useState(
+        () => initialScreens.showMusicToMoodBridgeScreen,
+    )
+    const [currentQuestion, setCurrentQuestion] = useState(() => initialScreens.currentQuestion)
     const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
 
     /** True while prep is fading out toward the questionnaire. */
@@ -309,33 +371,73 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     const prepExitToQuestionsTimeoutRef = useRef<number>(0)
 
     const [revealWelcomeFirst, setRevealWelcomeFirst] = useState(false)
-    const [revealWelcomeSecond, setRevealWelcomeSecond] = useState(false)
-    const [revealWelcomeCta, setRevealWelcomeCta] = useState(false)
+    /** Second intro paragraph and Get Started fade in together. */
+    const [revealWelcomeIntroCta, setRevealWelcomeIntroCta] = useState(false)
+    /** Demo teaser line and See it in action fade in together. */
+    const [revealWelcomeDemo, setRevealWelcomeDemo] = useState(false)
 
     useLayoutEffect(() => {
-        if (!startAtMusicProfileQuestions) return
-        const raw = localStorage.getItem("musicBaseline")
-        if (!raw) return
-        let baseline: MusicBaseline
-        try {
-            baseline = JSON.parse(raw) as MusicBaseline
-        } catch {
+        if (followAlong.walkthroughActive) {
+            const baseline = getViviDraftBaseline()
+            setListGenres([...baseline.favGenres])
+            setListContexts([...baseline.personalContexts])
+            setAdditionalContext(baseline.addContext)
+            setListOfArtists(artistsFromBaselineStored(baseline.favArtists ?? []) as ArtistOption[])
+            setListOfTracks(tracksFromBaselineStored(baseline.favTracks ?? []) as TrackOption[])
             return
         }
-        if (!baseline || typeof baseline !== "object") return
 
-        if (Array.isArray(baseline.favGenres)) {
-            setListGenres([...baseline.favGenres])
-        }
-        if (Array.isArray(baseline.personalContexts)) {
-            setListContexts([...baseline.personalContexts])
-        }
-        if (typeof baseline.addContext === "string") {
-            setAdditionalContext(baseline.addContext)
-        }
-        setListOfArtists(artistsFromBaselineStored(baseline.favArtists ?? []) as ArtistOption[])
-        setListOfTracks(tracksFromBaselineStored(baseline.favTracks ?? []) as TrackOption[])
-    }, [startAtMusicProfileQuestions])
+        const draft = readOnboardingDraftOrBaseline()
+        if (!draft) return
+        setListGenres([...draft.listGenres])
+        setListContexts([...draft.listContexts])
+        setAdditionalContext(draft.additionalContext)
+        setListOfArtists(draft.listOfArtists as ArtistOption[])
+        setListOfTracks(draft.listOfTracks as TrackOption[])
+    }, [followAlong.walkthroughActive])
+
+    useEffect(() => {
+        writeAppProgress({ view: "onboarding" })
+    }, [])
+
+    useEffect(() => {
+        if (followAlong.walkthroughActive) return
+        writeOnboardingScreenProgress({
+            showWelcomeScreen,
+            showDemoScreen,
+            showPrepScreen,
+            showMusicToMoodBridgeScreen,
+            currentQuestion,
+        })
+    }, [
+        followAlong.walkthroughActive,
+        showWelcomeScreen,
+        showDemoScreen,
+        showPrepScreen,
+        showMusicToMoodBridgeScreen,
+        currentQuestion,
+    ])
+
+    useEffect(() => {
+        if (followAlong.walkthroughActive) return
+        const timer = window.setTimeout(() => {
+            writeOnboardingDraft({
+                listGenres,
+                listContexts,
+                additionalContext,
+                listOfArtists,
+                listOfTracks,
+            })
+        }, 400)
+        return () => window.clearTimeout(timer)
+    }, [
+        followAlong.walkthroughActive,
+        listGenres,
+        listContexts,
+        additionalContext,
+        listOfArtists,
+        listOfTracks,
+    ])
 
     useEffect(() => {
         setNextBlockedHint(null)
@@ -350,8 +452,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     useEffect(() => {
         if (!showWelcomeScreen) {
             setRevealWelcomeFirst(false)
-            setRevealWelcomeSecond(false)
-            setRevealWelcomeCta(false)
+            setRevealWelcomeIntroCta(false)
+            setRevealWelcomeDemo(false)
             return
         }
 
@@ -361,8 +463,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         if (reduced) {
             queueMicrotask(() => {
                 setRevealWelcomeFirst(true)
-                setRevealWelcomeSecond(true)
-                setRevealWelcomeCta(true)
+                setRevealWelcomeIntroCta(true)
+                setRevealWelcomeDemo(true)
             })
             return undefined
         }
@@ -372,12 +474,12 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         const pause = WELCOME_PAUSE_BETWEEN_MS
 
         const afterFirst = intro + fade + pause
-        const afterSecond = afterFirst + fade + pause
+        const afterIntroCta = afterFirst + fade + pause
 
         const ids: ReturnType<typeof setTimeout>[] = [
             window.setTimeout(() => setRevealWelcomeFirst(true), intro),
-            window.setTimeout(() => setRevealWelcomeSecond(true), afterFirst),
-            window.setTimeout(() => setRevealWelcomeCta(true), afterSecond),
+            window.setTimeout(() => setRevealWelcomeIntroCta(true), afterFirst),
+            window.setTimeout(() => setRevealWelcomeDemo(true), afterIntroCta),
         ]
 
         return () => {
@@ -387,9 +489,47 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
     }, [showWelcomeScreen])
 
+    const [revealDemoImage, setRevealDemoImage] = useState(false)
+    const [revealDemoCta, setRevealDemoCta] = useState(false)
+
     const [revealPrepHeadline, setRevealPrepHeadline] = useState(false)
     const [revealPrepBody, setRevealPrepBody] = useState(false)
     const [revealPrepCta, setRevealPrepCta] = useState(false)
+
+    useEffect(() => {
+        if (!showDemoScreen) {
+            setRevealDemoImage(false)
+            setRevealDemoCta(false)
+            return
+        }
+
+        const reduced =
+            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+        if (reduced) {
+            queueMicrotask(() => {
+                setRevealDemoImage(true)
+                setRevealDemoCta(true)
+            })
+            return undefined
+        }
+
+        const intro = WELCOME_INTRO_STILLNESS_MS
+        const fade = WELCOME_LINE_FADE_MS
+        const pause = WELCOME_PAUSE_BETWEEN_MS
+        const ctaAt = intro + fade + pause
+
+        const ids: ReturnType<typeof setTimeout>[] = [
+            window.setTimeout(() => setRevealDemoImage(true), intro),
+            window.setTimeout(() => setRevealDemoCta(true), ctaAt),
+        ]
+
+        return () => {
+            for (const id of ids) {
+                window.clearTimeout(id)
+            }
+        }
+    }, [showDemoScreen])
 
     useEffect(() => {
         if (!showPrepScreen) {
@@ -511,10 +651,18 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
     }, [showWelcomeScreen, showPrepScreen, questionStageOpacityVisible])
 
+    const welcomeRevealClass = (revealed: boolean) =>
+        cn(
+            "transition-opacity ease-out motion-reduce:transition-none",
+            revealed
+                ? "opacity-100 motion-safe:duration-[900ms]"
+                : "pointer-events-none opacity-0 motion-safe:duration-0",
+        )
+
     const welcomeFadeClass = (revealed: boolean) =>
         cn(
-            "text-pretty text-[0.9375rem] leading-relaxed transition-opacity ease-out motion-reduce:transition-none sm:text-base",
-            revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
+            "text-pretty text-[0.9375rem] leading-relaxed sm:text-base",
+            welcomeRevealClass(revealed),
         )
 
     const handleAddArtist = (artist: ArtistOption) => {
@@ -585,6 +733,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             addContext: additionalContext
         }
         localStorage.setItem('musicBaseline', JSON.stringify(baseline))
+        clearOnboardingDraft()
         setView("checkin")
     }
 
@@ -609,9 +758,37 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
     }
 
+    const handleSeeItInAction = () => {
+        setShowWelcomeScreen(false)
+        setShowDemoScreen(true)
+    }
+
+    const resetMusicalProfileDraft = () => {
+        setListGenres([])
+        setListContexts([])
+        setAdditionalContext("")
+        setListOfArtists([])
+        setListOfTracks([])
+        setSearchTermArtist("")
+        setSearchTermTrack("")
+        setCurrentQuestion(0)
+    }
+
+    const handleFollowAlong = () => {
+        followAlong.startViviWalkthrough()
+        setShowDemoScreen(false)
+        setShowPrepScreen(true)
+    }
+
     const handleNext = () => {
         if (showWelcomeScreen) {
             setShowWelcomeScreen(false)
+            setShowPrepScreen(true)
+            return
+        }
+
+        if (showDemoScreen) {
+            setShowDemoScreen(false)
             setShowPrepScreen(true)
             return
         }
@@ -650,6 +827,11 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
 
     const handleBack = () => {
         if (showWelcomeScreen) return
+        if (showDemoScreen) {
+            setShowDemoScreen(false)
+            setShowWelcomeScreen(true)
+            return
+        }
         if (showPrepScreen) {
             if (prepExitToQuestionsTimeoutRef.current !== 0) {
                 window.clearTimeout(prepExitToQuestionsTimeoutRef.current)
@@ -657,6 +839,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             }
             setPrepIsExitingToQuestions(false)
             setShowPrepScreen(false)
+            resetMusicalProfileDraft()
+            followAlong.endViviWalkthrough()
             setShowWelcomeScreen(true)
             return
         }
@@ -673,6 +857,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     }
 
     const renderCurrentQuestion = () => {
+        const followAlongLocked = followAlong.walkthroughActive
+
         if (currentQuestion === 0) {
             return (
                 <QuestionBlock
@@ -681,6 +867,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                     options={genres}
                     selectedValues={listGenres}
                     onToggle={handleAddGenre}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -704,6 +891,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                         imageUrl: artist.imageUrl
                     }))}
                     onRemoveSelectedItem={handleRemoveArtist}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -730,6 +918,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                         imageUrl: track.imageUrl
                     }))}
                     onRemoveSelectedItem={handleRemoveTrack}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -742,6 +931,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                     options={musicContexts}
                     selectedValues={listContexts}
                     onToggle={handleAddContext}
+                    interactionLocked={followAlongLocked}
                 />
             )
         }
@@ -752,6 +942,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                 prompt="Is there anything else about your relationship with music you'd want us to know?"
                 value={additionalContext}
                 onChange={handleAdditionalContext}
+                interactionLocked={followAlongLocked}
             />
         )
     }
@@ -782,25 +973,90 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                                     <div>through your feelings with music that feels like yours.</div>
                                 </div>
                             </div>
-                            <div className={welcomeFadeClass(revealWelcomeSecond)}>
+                            <div className={welcomeFadeClass(revealWelcomeIntroCta)}>
                                 <div className="flex flex-col gap-y-2">
                                     <div>We’ll get to know your music taste, ask how you’re feeling today,</div>
                                     <div>and put together a playlist that helps you find your way through.</div>
                                 </div>
                             </div>
                         </div>
-                        <div
-                            className={cn(
-                                "mt-10 sm:mt-12",
-                                "transition-opacity ease-out motion-reduce:transition-none",
-                                revealWelcomeCta
-                                    ? "opacity-100 motion-safe:duration-[900ms]"
-                                    : "pointer-events-none opacity-0 motion-safe:duration-0",
-                            )}
-                        >
-                            <Button type="button" onClick={handleNext}>
-                                Get Started
-                            </Button>
+                        <div className="mt-10 flex flex-col items-center sm:mt-12">
+                            <div className={welcomeRevealClass(revealWelcomeIntroCta)}>
+                                <Button type="button" onClick={handleNext}>
+                                    Get Started
+                                </Button>
+                            </div>
+                            <div className="mt-24 flex flex-col items-center gap-6 sm:mt-32">
+                                <p
+                                    className={cn(
+                                        "max-w-md text-pretty text-muted-foreground italic",
+                                        welcomeFadeClass(revealWelcomeDemo),
+                                    )}
+                                >
+                                    Short on time, or just curious? See how MuNu guides someone from anxious to calm.
+                                </p>
+                                <div className={welcomeRevealClass(revealWelcomeDemo)}>
+                                    <Button type="button" variant="outline" onClick={handleSeeItInAction}>
+                                        See it in action
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )
+    }
+
+    if (showDemoScreen) {
+        return (
+            <div className="flex min-h-svh items-center justify-center px-6 py-10">
+                <div className="w-full max-w-3xl">
+                    <div key="onboarding-demo" className="min-h-[520px] space-y-4">
+                        <div className="flex min-h-[520px] flex-col justify-between">
+                            <div className="flex min-h-[420px] flex-col items-center justify-center">
+                                <div
+                                    className={cn(
+                                        "flex w-full max-w-lg flex-col items-center gap-y-6",
+                                        welcomeRevealClass(revealDemoImage),
+                                    )}
+                                >
+                                    <img
+                                        src={viviImage}
+                                        alt="Illustration of a character waving hello"
+                                        className="w-full max-w-[260px] sm:max-w-[300px]"
+                                    />
+                                    <p className="m-0 w-full text-pretty text-center text-[0.9375rem] leading-relaxed text-muted-foreground sm:text-base">
+                                        This is ViVi. She is a 28 year old barista who just got off a long day of
+                                        work. As one commonly does, she decided to relax by scrolling through
+                                        social media, but it ended up making her feel more agitated than at ease.
+                                        Luckily, music has always been a way for her to calm down, so she opened
+                                        MuNu. Let’s see how it goes.
+                                    </p>
+                                </div>
+                            </div>
+                            <div
+                                className={cn(
+                                    "mt-6 flex items-center justify-between",
+                                    "transition-opacity ease-out motion-reduce:transition-none",
+                                    revealDemoCta
+                                        ? "opacity-100 motion-safe:duration-[900ms]"
+                                        : "pointer-events-none opacity-0 motion-safe:duration-0",
+                                )}
+                            >
+                                <Button type="button" variant="outline" onClick={handleBack}>
+                                    Back
+                                </Button>
+                                <Button type="button" onClick={handleFollowAlong}>
+                                    Follow along
+                                    <ArrowRight
+                                        aria-hidden
+                                        className="size-4 opacity-90"
+                                        data-icon="inline-end"
+                                        strokeWidth={2}
+                                    />
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </div>

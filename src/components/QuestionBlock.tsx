@@ -1,6 +1,7 @@
 import { X } from "lucide-react"
 import { useEffect, useRef, useState, type ChangeEvent } from "react"
 
+import { cn } from "../lib/utils"
 import { Badge } from "./ui/badge"
 import {
   Command,
@@ -49,10 +50,13 @@ type TextareaQuestion = {
 
 type QuestionBlockProps = {
   prompt: string
+  /** When true, multiple-choice, search (input + results + chip removal), and textarea are non-editable. */
+  interactionLocked?: boolean
 } & (MultipleChoiceQuestion | SearchQuestion | TextareaQuestion)
 
 function QuestionBlock(props: QuestionBlockProps) {
-  const { prompt } = props
+  const { prompt, interactionLocked } = props
+  const locked = interactionLocked === true
   const [showRightContent, setShowRightContent] = useState(false)
   const selectedItemsScrollRef = useRef<HTMLDivElement | null>(null)
   const selectedSearchCount = props.kind === "search" ? (props.selectedItems?.length ?? 0) : 0
@@ -93,11 +97,14 @@ function QuestionBlock(props: QuestionBlockProps) {
             <CommandInput
               className="text-left"
               value={props.searchTerm}
-              onValueChange={props.onSearchTermChange}
+              onValueChange={locked ? () => {} : props.onSearchTermChange}
               placeholder={props.placeholder}
+              disabled={locked}
             />
-            <CommandList className="min-h-40">
-              {props.results.map((result) => (
+            <CommandList
+              className={cn(!locked && "min-h-40", locked && "pointer-events-none min-h-0 opacity-60")}
+            >
+              {(locked ? [] : props.results).map((result) => (
                 <CommandItem
                   key={result.id}
                   onSelect={() => {
@@ -119,17 +126,27 @@ function QuestionBlock(props: QuestionBlockProps) {
         }`}
       >
         {props.kind === "multiple-choice" && (
-          <div className="flex flex-wrap gap-3">
-            {props.options.map((option) => (
-              <Badge
-                key={option}
-                variant={props.selectedValues.includes(option) ? "default" : "outline"}
-                className="h-auto min-h-10 cursor-pointer rounded-xl px-4 py-2.5 text-sm leading-snug"
-                onClick={() => props.onToggle(option)}
-              >
-                {option}
-              </Badge>
-            ))}
+          <div
+            className={cn("flex flex-wrap gap-3", locked && "pointer-events-none")}
+            aria-disabled={locked}
+          >
+            {props.options.map((option) => {
+              const selected = props.selectedValues.includes(option)
+              return (
+                <Badge
+                  key={option}
+                  variant={selected ? "default" : "outline"}
+                  className={cn(
+                    "h-auto min-h-10 rounded-xl px-4 py-2.5 text-sm leading-snug",
+                    locked ? "cursor-default select-none" : "cursor-pointer",
+                    locked && !selected && "opacity-45",
+                  )}
+                  onClick={locked ? undefined : () => props.onToggle(option)}
+                >
+                  {option}
+                </Badge>
+              )
+            })}
           </div>
         )}
 
@@ -156,7 +173,7 @@ function QuestionBlock(props: QuestionBlockProps) {
                       <p className="line-clamp-2 text-xs text-black/90 drop-shadow-sm">{item.subtitle}</p>
                     )}
                   </div>
-                  {props.onRemoveSelectedItem && (
+                  {props.onRemoveSelectedItem && !locked && (
                     <button
                       type="button"
                       className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
@@ -175,7 +192,7 @@ function QuestionBlock(props: QuestionBlockProps) {
                   {item.subtitle && (
                     <p className="line-clamp-2 text-xs text-zinc-300">{item.subtitle}</p>
                   )}
-                  {props.onRemoveSelectedItem && (
+                  {props.onRemoveSelectedItem && !locked && (
                     <button
                       type="button"
                       className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
@@ -196,6 +213,7 @@ function QuestionBlock(props: QuestionBlockProps) {
             value={props.value}
             onChange={props.onChange}
             placeholder={props.placeholder}
+            disabled={locked}
           />
         )}
       </div>
