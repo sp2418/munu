@@ -6,6 +6,7 @@ import QuestionStageLayout, {
 import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
+import { getSpotifyAccessToken } from "../lib/spotifyToken"
 
 import type { MusicBaseline } from "../lib/reccobeatsEnrich"
 
@@ -178,7 +179,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
 
     const searchArtists = async (searchTermArtist: string) => {
         // console.log(`/spotify/v1/search?q=${searchTermArtist}&type=artist`)
-        const token = localStorage.getItem('spotifyToken')
+        const token = await getSpotifyAccessToken()
+        if (!token) return {}
         const response = await fetch(`/api/spotify-search?q=${searchTermArtist}&type=artist&token=${token}`)
         const data = await response.json()
         return data
@@ -205,7 +207,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         const timer = setTimeout(() => {
             const fetchArtists = async () => {
                 const results = await searchArtists(searchTermArtist)
-                const artists: ArtistOption[] = results.artists.items.map((artist : SpotifyArtist) => ({
+                const artists: ArtistOption[] = (results.artists?.items ?? []).map((artist : SpotifyArtist) => ({
                     id: artist.id,
                     name: artist.name,
                     imageUrl: artist.images?.[0]?.url ?? ""
@@ -237,7 +239,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         // })
         // // console.log(response.status)
         // const data = await response.json()
-        const token = localStorage.getItem('spotifyToken')
+        const token = await getSpotifyAccessToken()
+        if (!token) return {}
         const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track&token=${token}`)
         const data = await response.json()
         return data
@@ -282,7 +285,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         const timer = setTimeout(() => {
             const fetchTracks = async () => {
                 const results = await searchTracks(searchTermTrack)
-                const uniqueTracks = results.tracks.items.filter(
+                const uniqueTracks = (results.tracks?.items ?? []).filter(
                     (track: SpotifyTrack, index: number, self: SpotifyTrack[]) =>
                         index === self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track))
                 )

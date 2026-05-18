@@ -20,5 +20,13 @@ export default async function handleSpotifyTokenRequest(req: VercelRequest, res:
         body: new URLSearchParams({grant_type: 'client_credentials'})     
     })
     const data = await response.json()
-    res.status(200).json({ access_token: data.access_token })
+    if (!response.ok || !data.access_token) {
+        return res.status(response.status || 500).json({
+            error: data.error_description ?? data.error ?? 'Failed to fetch Spotify token',
+        })
+    }
+    res.status(200).json({
+        access_token: data.access_token,
+        expires_in: data.expires_in ?? 3600,
+    })
 }

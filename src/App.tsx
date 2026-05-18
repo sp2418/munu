@@ -14,6 +14,7 @@ import {
 import { clearCheckInDraft } from './lib/checkInDraftStorage'
 import { FollowAlongPersonaProvider, useFollowAlongPersona } from './context/FollowAlongPersonaContext'
 import FollowAlongBanner from './components/FollowAlongBanner'
+import { prefetchSpotifyAccessToken } from './lib/spotifyToken'
 
 function AppContent() {
   const followAlong = useFollowAlongPersona()
@@ -32,13 +33,7 @@ function AppContent() {
   const prevViewRef = useRef<string>(currentView)
 
   useEffect(() => {
-    const getSpotifyToken = async () => {
-      const response = await fetch('/api/spotify-token')
-      const data = await response.json()
-      localStorage.setItem('spotifyToken', data.access_token)
-    }
-
-    getSpotifyToken()
+    prefetchSpotifyAccessToken()
   }, [])
 
   useEffect(() => {

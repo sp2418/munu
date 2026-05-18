@@ -12,6 +12,7 @@ import {
 import { Button } from "../components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { cn } from "../lib/utils"
+import { getSpotifyAccessToken } from "../lib/spotifyToken"
 import {
   enrichStoredMusicProfilesWithReccoBeats,
   type CurrEmotContext,
@@ -1194,7 +1195,8 @@ function Results({
         str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
       console.log("number of songs", songs.length)
-      const token = localStorage.getItem('spotifyToken')
+      const token = await getSpotifyAccessToken()
+      if (!token) return verifiedSongs
       for (const song of songs) {
         await new Promise(resolve => setTimeout(resolve, 200))
 

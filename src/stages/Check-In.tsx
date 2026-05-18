@@ -4,6 +4,7 @@ import QuestionStageLayout, {
   QUESTION_REQUIRED_FOOTER_HINT,
 } from "../components/QuestionStageLayout"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
+import { getSpotifyAccessToken } from "../lib/spotifyToken"
 import type { CurrEmotContext } from "../lib/reccobeatsEnrich"
 
 import { useFollowAlongPersona } from "../context/FollowAlongPersonaContext"
@@ -141,7 +142,8 @@ function CheckIn({setView}: CheckInProps) {
         // })
         // // console.log(response.status)
         // const data = await response.json()
-        const token = localStorage.getItem('spotifyToken')
+        const token = await getSpotifyAccessToken()
+        if (!token) return {}
         const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track&token=${token}`)
         const data = await response.json()
         return data
@@ -191,7 +193,7 @@ function CheckIn({setView}: CheckInProps) {
         }
         const fetchTracks = async () => {
             const results = await searchTracks(searchTermTrack)
-            const uniqueTracks = results.tracks.items.filter(
+            const uniqueTracks = (results.tracks?.items ?? []).filter(
                 (track: SpotifyTrack, index: number, self: SpotifyTrack[]) =>
                     index === self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track))
             )
