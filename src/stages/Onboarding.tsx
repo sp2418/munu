@@ -1,9 +1,11 @@
+import IntroScreen from "../components/IntroScreen"
+import StoryScreen from "../components/StoryScreen"
+import Welcome from "./Welcome"
 import QuestionBlock from "../components/QuestionBlock"
 import QuestionStageLayout, {
     QUESTION_HINT_AUTO_HIDE_MS,
     QUESTION_REQUIRED_FOOTER_HINT,
 } from "../components/QuestionStageLayout"
-import { Button } from "../components/ui/button"
 import { cn } from "../lib/utils"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 import { getSpotifyAccessToken } from "../lib/spotifyToken"
@@ -11,8 +13,6 @@ import { getSpotifyAccessToken } from "../lib/spotifyToken"
 import type { MusicBaseline } from "../lib/reccobeatsEnrich"
 
 import viviImage from "../assets/vivi.jpg"
-import { ArrowRight } from "lucide-react"
-
 import { useFollowAlongPersona } from "../context/FollowAlongPersonaContext"
 import {
     readOnboardingScreenProgress,
@@ -26,7 +26,10 @@ import {
 } from "../lib/onboardingDraftStorage"
 import { getViviDraftBaseline, isViviWalkthroughActive } from "../lib/viviWalkthroughStorage"
 
-import { useState, useEffect, useLayoutEffect, useRef } from "react"
+import { useState, useEffect, useLayoutEffect, useMemo } from "react"
+
+import ScreenTransitionHost from "../components/ScreenTransitionHost"
+import type { SoundWaveProps } from "../components/SoundWave"
 
 function initialOnboardingScreens(startAtMusicProfileQuestions: boolean) {
     const noSavedProfile =
@@ -124,8 +127,6 @@ const WELCOME_INTRO_STILLNESS_MS = 500
 const WELCOME_PAUSE_BETWEEN_MS = 700
 /** After the prep headline line finishes fading, pause before the second line fades in. */
 const PREP_STAGGER_LINE_PAUSE_MS = 550
-/** Prep screen fades out before the questionnaire mounts (motion only). */
-const PREP_SCREEN_EXIT_FADE_MS = 500
 /** Opacity transition length for each sentence (keep in sync with `motion-safe:duration-[900ms]` below). */
 const WELCOME_LINE_FADE_MS = 900
 
@@ -367,18 +368,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     const [currentQuestion, setCurrentQuestion] = useState(() => initialScreens.currentQuestion)
     const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
 
-    /** True while prep is fading out toward the questionnaire. */
-    const [prepIsExitingToQuestions, setPrepIsExitingToQuestions] = useState(false)
-    /** Controls opacity fade-in when entering QuestionStageLayout after prep (stays true while moving between questions). */
-    const [questionStageOpacityVisible, setQuestionStageOpacityVisible] = useState(true)
-    const prepExitToQuestionsTimeoutRef = useRef<number>(0)
-
-    const [revealWelcomeFirst, setRevealWelcomeFirst] = useState(false)
-    /** Second intro paragraph and Get Started fade in together. */
-    const [revealWelcomeIntroCta, setRevealWelcomeIntroCta] = useState(false)
-    /** Demo teaser line and See it in action fade in together. */
-    const [revealWelcomeDemo, setRevealWelcomeDemo] = useState(false)
-
     useLayoutEffect(() => {
         if (followAlong.walkthroughActive) {
             const baseline = getViviDraftBaseline()
@@ -451,46 +440,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         const id = window.setTimeout(() => setNextBlockedHint(null), QUESTION_HINT_AUTO_HIDE_MS)
         return () => window.clearTimeout(id)
     }, [nextBlockedHint])
-
-    useEffect(() => {
-        if (!showWelcomeScreen) {
-            setRevealWelcomeFirst(false)
-            setRevealWelcomeIntroCta(false)
-            setRevealWelcomeDemo(false)
-            return
-        }
-
-        const reduced =
-            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-        if (reduced) {
-            queueMicrotask(() => {
-                setRevealWelcomeFirst(true)
-                setRevealWelcomeIntroCta(true)
-                setRevealWelcomeDemo(true)
-            })
-            return undefined
-        }
-
-        const intro = WELCOME_INTRO_STILLNESS_MS
-        const fade = WELCOME_LINE_FADE_MS
-        const pause = WELCOME_PAUSE_BETWEEN_MS
-
-        const afterFirst = intro + fade + pause
-        const afterIntroCta = afterFirst + fade + pause
-
-        const ids: ReturnType<typeof setTimeout>[] = [
-            window.setTimeout(() => setRevealWelcomeFirst(true), intro),
-            window.setTimeout(() => setRevealWelcomeIntroCta(true), afterFirst),
-            window.setTimeout(() => setRevealWelcomeDemo(true), afterIntroCta),
-        ]
-
-        return () => {
-            for (const id of ids) {
-                window.clearTimeout(id)
-            }
-        }
-    }, [showWelcomeScreen])
 
     const [revealDemoImage, setRevealDemoImage] = useState(false)
     const [revealDemoCta, setRevealDemoCta] = useState(false)
@@ -622,50 +571,12 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
     }, [showMusicToMoodBridgeScreen])
 
-    useEffect(() => {
-        return () => {
-            if (prepExitToQuestionsTimeoutRef.current !== 0) {
-                window.clearTimeout(prepExitToQuestionsTimeoutRef.current)
-            }
-        }
-    }, [])
-
-    useLayoutEffect(() => {
-        if (showWelcomeScreen || showPrepScreen) return
-        if (questionStageOpacityVisible) return
-
-        const reduced =
-            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-        if (reduced) {
-            queueMicrotask(() => setQuestionStageOpacityVisible(true))
-            return undefined
-        }
-
-        let outerRaf = 0
-        let innerRaf = 0
-        outerRaf = requestAnimationFrame(() => {
-            innerRaf = requestAnimationFrame(() => setQuestionStageOpacityVisible(true))
-        })
-
-        return () => {
-            cancelAnimationFrame(outerRaf)
-            cancelAnimationFrame(innerRaf)
-        }
-    }, [showWelcomeScreen, showPrepScreen, questionStageOpacityVisible])
-
     const welcomeRevealClass = (revealed: boolean) =>
         cn(
             "transition-opacity ease-out motion-reduce:transition-none",
             revealed
                 ? "opacity-100 motion-safe:duration-[900ms]"
                 : "pointer-events-none opacity-0 motion-safe:duration-0",
-        )
-
-    const welcomeFadeClass = (revealed: boolean) =>
-        cn(
-            "text-pretty text-[0.9375rem] leading-relaxed sm:text-base",
-            welcomeRevealClass(revealed),
         )
 
     const handleAddArtist = (artist: ArtistOption) => {
@@ -797,21 +708,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
 
         if (showPrepScreen) {
-            const reduced =
-                typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-            if (reduced) {
-                setQuestionStageOpacityVisible(true)
-                setShowPrepScreen(false)
-                return
-            }
-
-            setPrepIsExitingToQuestions(true)
-            prepExitToQuestionsTimeoutRef.current = window.setTimeout(() => {
-                prepExitToQuestionsTimeoutRef.current = 0
-                setShowPrepScreen(false)
-                setPrepIsExitingToQuestions(false)
-                setQuestionStageOpacityVisible(false)
-            }, PREP_SCREEN_EXIT_FADE_MS)
+            setShowPrepScreen(false)
             return
         }
 
@@ -836,11 +733,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             return
         }
         if (showPrepScreen) {
-            if (prepExitToQuestionsTimeoutRef.current !== 0) {
-                window.clearTimeout(prepExitToQuestionsTimeoutRef.current)
-                prepExitToQuestionsTimeoutRef.current = 0
-            }
-            setPrepIsExitingToQuestions(false)
             setShowPrepScreen(false)
             resetMusicalProfileDraft()
             followAlong.endViviWalkthrough()
@@ -852,7 +744,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             return
         }
         if (currentQuestion === 0) {
-            setQuestionStageOpacityVisible(true)
             setShowPrepScreen(true)
             return
         }
@@ -961,228 +852,87 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     //     localStorage.setItem('musicBaseline', JSON.stringify(baseline))
     // }, [listOfArtists, listOfTracks, listGenres, listContexts, additionalContext])
 
+    const onboardingScreenKey = useMemo(() => {
+        if (showWelcomeScreen) return "welcome"
+        if (showDemoScreen) return "demo"
+        if (showPrepScreen) return "prep"
+        if (showMusicToMoodBridgeScreen) return "bridge"
+        return `question-${currentQuestion}`
+    }, [
+        showWelcomeScreen,
+        showDemoScreen,
+        showPrepScreen,
+        showMusicToMoodBridgeScreen,
+        currentQuestion,
+    ])
+
+    const onboardingWave = useMemo((): SoundWaveProps => {
+        const isWelcome = onboardingScreenKey === "welcome"
+        return {
+            mode: isWelcome ? "center" : "floor",
+            color: "var(--fill)",
+            swell: 0.4,
+            className: isWelcome ? "welcome-sound-wave" : undefined,
+        }
+    }, [onboardingScreenKey])
+
+    let onboardingContent
+
     if (showWelcomeScreen) {
-        return (
-            <div className="flex min-h-svh items-center justify-center px-6 py-10">
-                <div className="w-full max-w-3xl">
-                    <div key="onboarding-welcome" className="text-center">
-                        <div
-                            className="mx-auto flex w-full max-w-prose flex-col gap-y-16 text-center sm:gap-y-24"
-                            aria-live="polite"
-                        >
-                            <div className={welcomeFadeClass(revealWelcomeFirst)}>
-                                <div className="flex flex-col gap-y-2">
-                                    <div>Hi there! Welcome to Musical Nutrients, an app that guides you</div>
-                                    <div>through your feelings with music that feels like yours.</div>
-                                </div>
-                            </div>
-                            <div className={welcomeFadeClass(revealWelcomeIntroCta)}>
-                                <div className="flex flex-col gap-y-2">
-                                    <div>We’ll get to know your music taste, ask how you’re feeling today,</div>
-                                    <div>and put together a playlist that helps you find your way through.</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-10 flex flex-col items-center sm:mt-12">
-                            <div className={welcomeRevealClass(revealWelcomeIntroCta)}>
-                                <Button type="button" onClick={handleNext}>
-                                    Get Started
-                                </Button>
-                            </div>
-                            <div className="mt-24 flex flex-col items-center gap-6 sm:mt-32">
-                                <p
-                                    className={cn(
-                                        "max-w-md text-pretty text-muted-foreground italic",
-                                        welcomeFadeClass(revealWelcomeDemo),
-                                    )}
-                                >
-                                    Short on time, or just curious? See how MuNu guides someone from anxious to calm.
-                                </p>
-                                <div className={welcomeRevealClass(revealWelcomeDemo)}>
-                                    <Button type="button" variant="outline" onClick={handleSeeItInAction}>
-                                        See it in action
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        onboardingContent = (
+            <Welcome onGetStarted={handleNext} onSeeDemo={handleSeeItInAction} />
         )
-    }
-
-    if (showDemoScreen) {
-        return (
-            <div className="flex min-h-svh items-center justify-center px-6 py-10">
-                <div className="w-full max-w-3xl">
-                    <div key="onboarding-demo" className="min-h-[520px] space-y-4">
-                        <div className="flex min-h-[520px] flex-col justify-between">
-                            <div className="flex min-h-[420px] flex-col items-center justify-center">
-                                <div
-                                    className={cn(
-                                        "flex w-full max-w-lg flex-col items-center gap-y-6",
-                                        welcomeRevealClass(revealDemoImage),
-                                    )}
-                                >
-                                    <img
-                                        src={viviImage}
-                                        alt="Illustration of a character waving hello"
-                                        className="w-full max-w-[260px] sm:max-w-[300px]"
-                                    />
-                                    <p className="m-0 w-full text-pretty text-center text-[0.9375rem] leading-relaxed text-muted-foreground sm:text-base">
-                                        This is ViVi. She is a 28 year old barista who just got off a long day of
-                                        work. As one commonly does, she decided to relax by scrolling through
-                                        social media, but it ended up making her feel more agitated than at ease.
-                                        Luckily, music has always been a way for her to calm down, so she opened
-                                        MuNu. Let’s see how it goes.
-                                    </p>
-                                </div>
-                            </div>
-                            <div
-                                className={cn(
-                                    "mt-6 flex items-center justify-between",
-                                    "transition-opacity ease-out motion-reduce:transition-none",
-                                    revealDemoCta
-                                        ? "opacity-100 motion-safe:duration-[900ms]"
-                                        : "pointer-events-none opacity-0 motion-safe:duration-0",
-                                )}
-                            >
-                                <Button type="button" variant="outline" onClick={handleBack}>
-                                    Back
-                                </Button>
-                                <Button type="button" onClick={handleFollowAlong}>
-                                    Follow along
-                                    <ArrowRight
-                                        aria-hidden
-                                        className="size-4 opacity-90"
-                                        data-icon="inline-end"
-                                        strokeWidth={2}
-                                    />
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        )
-    }
-
-    if (showPrepScreen) {
-        return (
-            <div
-                className={cn(
-                    "flex min-h-svh items-center justify-center px-6 py-10",
-                    "transition-opacity ease-out motion-reduce:transition-none",
-                    // Keep in sync with PREP_SCREEN_EXIT_FADE_MS.
-                    "motion-safe:duration-500",
-                    prepIsExitingToQuestions &&
-                        "pointer-events-none opacity-0 motion-reduce:pointer-events-auto motion-reduce:opacity-100",
-                )}
+    } else if (showDemoScreen) {
+        onboardingContent = (
+            <StoryScreen
+                image={viviImage}
+                imageAlt="Illustration of a character waving hello"
+                onBack={handleBack}
+                onContinue={handleFollowAlong}
+                contentClassName={welcomeRevealClass(revealDemoImage)}
+                footerClassName={welcomeRevealClass(revealDemoCta)}
             >
-                <div className="w-full max-w-3xl">
-                    <div key="onboarding-prep" className="min-h-[520px] space-y-4">
-                        <div className="flex justify-end">
-                            <p className="invisible text-sm text-muted-foreground select-none" aria-hidden>
-                                Question 1 of {totalQuestions}
-                            </p>
-                        </div>
-                        <div className="flex min-h-[420px] items-center justify-center">
-                            <div
-                                className="mx-auto w-full max-w-prose text-center"
-                                aria-live="polite"
-                            >
-                                <div className="flex flex-col gap-y-16 sm:gap-y-24">
-                                    <div className="flex flex-col gap-y-2">
-                                        <p className={cn("m-0", welcomeFadeClass(revealPrepHeadline))}>
-                                            First, the music.
-                                        </p>
-                                        <p className={cn("m-0", welcomeFadeClass(revealPrepBody))}>
-                                            Tell us a bit about what you listen to, so we can curate something that feels like yours.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div
-                        className={cn(
-                            "mt-6 flex items-center justify-between",
-                            "transition-opacity ease-out motion-reduce:transition-none",
-                            revealPrepCta
-                                ? "opacity-100 motion-safe:duration-[900ms]"
-                                : "pointer-events-none opacity-0 motion-safe:duration-0",
-                        )}
-                    >
-                        <Button type="button" variant="outline" onClick={handleBack}>
-                            Back
-                        </Button>
-                        <Button type="button" onClick={handleNext}>
-                            Continue
-                        </Button>
-                    </div>
-                </div>
-            </div>
+                This is ViVi. She is a 28 year old barista who just got off a long day of
+                work. As one commonly does, she decided to relax by scrolling through
+                social media, but it ended up making her feel more agitated than at ease.
+                Luckily, music has always been a way for her to calm down, so she opened
+                MuNu. Let’s see how it goes.
+            </StoryScreen>
         )
-    }
-
-    if (showMusicToMoodBridgeScreen) {
-        return (
-            <div className="flex min-h-svh items-center justify-center px-6 py-10">
-                <div className="w-full max-w-3xl">
-                    <div key="onboarding-bridge" className="min-h-[520px] space-y-4">
-                        <div className="flex justify-end">
-                            <p className="invisible text-sm text-muted-foreground select-none" aria-hidden>
-                                Question {totalQuestions} of {totalQuestions}
-                            </p>
-                        </div>
-                        <div className="flex min-h-[420px] items-center justify-center">
-                            <div
-                                className="mx-auto w-full max-w-prose text-center"
-                                aria-live="polite"
-                            >
-                                <div className="flex flex-col gap-y-16 sm:gap-y-24">
-                                    <div className="flex flex-col gap-y-2">
-                                        <p className={cn("m-0", welcomeFadeClass(revealBridgeHeadline))}>
-                                            Now, let's check in with you.
-                                        </p>
-                                        <p className={cn("m-0", welcomeFadeClass(revealBridgeBody))}>
-                                            A few questions about how you're feeling right now, so we can meet you there.
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div
-                        className={cn(
-                            "mt-6 flex items-center justify-between",
-                            "transition-opacity ease-out motion-reduce:transition-none",
-                            revealBridgeCta
-                                ? "opacity-100 motion-safe:duration-[900ms]"
-                                : "pointer-events-none opacity-0 motion-safe:duration-0",
-                        )}
-                    >
-                        <Button type="button" variant="outline" onClick={handleBack}>
-                            Back
-                        </Button>
-                        <Button type="button" onClick={handleBaseline}>
-                            Continue
-                        </Button>
-                    </div>
-                </div>
-            </div>
+    } else if (showPrepScreen) {
+        onboardingContent = (
+            <IntroScreen
+                title="First, the music."
+                subtitle="Tell us a bit about what you listen to, so we can curate something that feels like yours."
+                showDot={false}
+                onBack={handleBack}
+                onContinue={handleNext}
+                titleClassName={cn(
+                    welcomeRevealClass(revealPrepHeadline),
+                    "intro-screen__title--soft",
+                )}
+                subtitleClassName={welcomeRevealClass(revealPrepBody)}
+                footerClassName={welcomeRevealClass(revealPrepCta)}
+            />
         )
-    }
-
-    return (
-        <div
-            className={cn(
-                "transition-opacity ease-out motion-reduce:transition-none",
-                // Question-stage fade-in duration (milliseconds; tune both here if you change timing).
-                "motion-safe:duration-[700ms]",
-                questionStageOpacityVisible ? "opacity-100" : "opacity-0 motion-reduce:opacity-100",
-            )}
-        >
+    } else if (showMusicToMoodBridgeScreen) {
+        onboardingContent = (
+            <IntroScreen
+                title="Now, let's check in with you."
+                subtitle="A few questions about how you're feeling right now, so we can meet you there."
+                showDot={false}
+                onBack={handleBack}
+                onContinue={handleBaseline}
+                titleClassName={cn(
+                    welcomeRevealClass(revealBridgeHeadline),
+                    "intro-screen__title--soft",
+                )}
+                subtitleClassName={welcomeRevealClass(revealBridgeBody)}
+                footerClassName={welcomeRevealClass(revealBridgeCta)}
+            />
+        )
+    } else {
+        onboardingContent = (
             <QuestionStageLayout
                 currentQuestion={currentQuestion + 1}
                 totalQuestions={totalQuestions}
@@ -1192,10 +942,21 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                 nextLabel={isLastQuestion ? "Done" : "Next"}
                 nextFooterHint={nextBlockedHint}
                 questionKey={`onboarding-question-${currentQuestion}`}
+                contentVariant={
+                    currentQuestion === 1 || currentQuestion === 2
+                        ? "search-picker"
+                        : "centered"
+                }
             >
                 {renderCurrentQuestion()}
             </QuestionStageLayout>
-        </div>
+        )
+    }
+
+    return (
+        <ScreenTransitionHost screenKey={onboardingScreenKey} wave={onboardingWave}>
+            {onboardingContent}
+        </ScreenTransitionHost>
     )
 }
 

@@ -15,6 +15,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
     "@fontsource-variable/lora": "^5.2.8",
+    "@fontsource/hanken-grotesk": "^5.2.8",
     "@tailwindcss/vite": "^4.2.1",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",

@@ -1,0 +1,155 @@
+/* MuNu flow chrome: option chips + pebble buttons (Warm Resonance / Lilac). */
+
+.munu-chip {
+  height: auto;
+  min-height: 0;
+  border-radius: 999px;
+  border: 1.5px solid rgba(33, 29, 23, 0.13);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 12px 22px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #5b5247;
+  box-shadow: none;
+  transition:
+    background 0.18s,
+    border-color 0.18s,
+    color 0.18s,
+    transform 0.18s,
+    box-shadow 0.18s;
+}
+
+.munu-chip:hover {
+  border-color: var(--tint);
+  color: var(--accent-text);
+  transform: translateY(-1px);
+}
+
+.munu-chip[aria-pressed="true"] {
+  border-color: var(--fill);
+  background: var(--fill);
+  color: var(--on-fill);
+  box-shadow: 0 3px 10px -4px rgba(var(--fill-rgb), 0.5);
+}
+
+.munu-chip[aria-pressed="true"]:hover {
+  color: var(--on-fill);
+  transform: translateY(-1px);
+}
+
+.munu-chip:focus-visible {
+  outline: 2px solid rgba(var(--fill-rgb), 0.55);
+  outline-offset: 2px;
+}
+
+[data-slot="button"].munu-btn-ghost {
+  height: auto;
+  min-height: 0;
+  border-radius: 999px;
+  border: 1.5px solid rgba(var(--fill-rgb), 0.28);
+  background: transparent;
+  padding: 12px 28px;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent-text);
+  box-shadow: none;
+  transition:
+    background 0.2s,
+    border-color 0.2s;
+}
+
+[data-slot="button"].munu-btn-ghost:hover {
+  border-color: rgba(var(--fill-rgb), 0.5);
+  background: rgba(var(--fill-rgb), 0.07);
+  color: var(--accent-text);
+}
+
+[data-slot="button"].munu-btn-ghost:focus-visible {
+  outline: 2px solid rgba(var(--fill-rgb), 0.55);
+  outline-offset: 2px;
+}
+
+[data-slot="button"].munu-btn-primary {
+  height: auto;
+  min-height: 0;
+  border-radius: 999px;
+  border: none;
+  background: var(--fill);
+  padding: 15px 40px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--on-fill);
+  box-shadow:
+    0 2px 6px -2px rgba(var(--fill-rgb), 0.35),
+    0 12px 28px -12px rgba(var(--fill-rgb), 0.45);
+  transition:
+    transform 0.2s cubic-bezier(0.2, 0.7, 0.3, 1),
+    filter 0.2s,
+    box-shadow 0.2s;
+}
+
+[data-slot="button"].munu-btn-primary:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.05);
+  background: var(--fill);
+  color: var(--on-fill);
+}
+
+[data-slot="button"].munu-btn-primary:focus-visible {
+  outline: 2px solid rgba(var(--fill-rgb), 0.55);
+  outline-offset: 2px;
+}
+
+/* Open-ended / reflection free-text field (Lora, soft note-like surface) */
+[data-slot="textarea"].munu-field {
+  min-height: 320px;
+  resize: none;
+  border-radius: 18px;
+  padding: 22px 24px;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  line-height: 1.62;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1.5px solid rgba(33, 29, 23, 0.14);
+  box-shadow: none;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
+}
+
+[data-slot="textarea"].munu-field::placeholder {
+  color: var(--ink-faint);
+}
+
+[data-slot="textarea"].munu-field:focus-visible {
+  border-color: rgba(var(--fill-rgb), 0.45);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 0 0 4px rgba(var(--fill-rgb), 0.08);
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+[data-slot="textarea"].munu-field:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .munu-chip:hover,
+  .munu-chip[aria-pressed="true"]:hover {
+    transform: none;
+  }
+
+  [data-slot="button"].munu-btn-primary:hover {
+    transform: none;
+    filter: none;
+  }
+}

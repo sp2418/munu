@@ -14,6 +14,7 @@ import {
 import { clearCheckInDraft } from './lib/checkInDraftStorage'
 import { FollowAlongPersonaProvider, useFollowAlongPersona } from './context/FollowAlongPersonaContext'
 import FollowAlongBanner from './components/FollowAlongBanner'
+import ScreenTransitionHost from './components/ScreenTransitionHost'
 import { prefetchSpotifyAccessToken } from './lib/spotifyToken'
 
 function AppContent() {
@@ -67,25 +68,35 @@ function AppContent() {
     setCurrentView("checkin")
   }
 
-  return (
-    <div>
-      <FollowAlongBanner onExitNavigation={exitFollowAlongToWelcome} />
-      <Analytics />
-      {currentView === "onboarding" && (
+  const renderCurrentView = () => {
+    if (currentView === "onboarding") {
+      return (
         <Onboarding
           key={onboardingMountKey}
           setView={setCurrentView}
           startAtMusicProfileQuestions={onboardingStartAtMusicProfile}
         />
-      )}
-      {currentView === "checkin" && <CheckIn setView={setCurrentView} />}
-      {currentView === "results" && (
-        <Results
-          onRebuildMusicProfile={handleRebuildMusicProfile}
-          onStartCheckInFresh={handleFreshCheckIn}
-          onExitFollowAlongToWelcome={exitFollowAlongToWelcome}
-        />
-      )}
+      )
+    }
+    if (currentView === "checkin") {
+      return <CheckIn setView={setCurrentView} />
+    }
+    return (
+      <Results
+        onRebuildMusicProfile={handleRebuildMusicProfile}
+        onStartCheckInFresh={handleFreshCheckIn}
+        onExitFollowAlongToWelcome={exitFollowAlongToWelcome}
+      />
+    )
+  }
+
+  return (
+    <div>
+      <FollowAlongBanner onExitNavigation={exitFollowAlongToWelcome} />
+      <Analytics />
+      <ScreenTransitionHost screenKey={currentView}>
+        {renderCurrentView()}
+      </ScreenTransitionHost>
     </div>
   )
 }

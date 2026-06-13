@@ -21,6 +21,8 @@ import {
 import { writeViviBakedResultsCache } from "../lib/resultsCache"
 import { getViviDraftCheckIn } from "../lib/viviWalkthroughStorage"
 
+import ScreenTransitionHost from "../components/ScreenTransitionHost"
+
 import { useState, useEffect } from "react"
 
 type CheckInTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
@@ -393,18 +395,24 @@ function CheckIn({setView}: CheckInProps) {
 
   
     return (
-      <QuestionStageLayout
-        currentQuestion={currentQuestion + 1}
-        totalQuestions={totalQuestions}
-        onBack={handleBack}
-        onNext={handleNext}
-        isBackDisabled={currentQuestion === 0}
-        nextLabel={isLastQuestion ? "Done" : "Next"}
-        nextFooterHint={nextBlockedHint}
-        questionKey={`checkin-question-${currentQuestion}`}
+      <ScreenTransitionHost
+        screenKey={`checkin-question-${currentQuestion}`}
+        wave={{ mode: "floor", color: "var(--fill)", swell: 0.4 }}
       >
-        {renderCurrentQuestion()}
-      </QuestionStageLayout>
+        <QuestionStageLayout
+          currentQuestion={currentQuestion + 1}
+          totalQuestions={totalQuestions}
+          onBack={handleBack}
+          onNext={handleNext}
+          isBackDisabled={currentQuestion === 0}
+          nextLabel={isLastQuestion ? "Done" : "Next"}
+          nextFooterHint={nextBlockedHint}
+          questionKey={`checkin-question-${currentQuestion}`}
+          contentVariant={currentQuestion === 2 ? "search-picker" : "centered"}
+        >
+          {renderCurrentQuestion()}
+        </QuestionStageLayout>
+      </ScreenTransitionHost>
     )
   }
 

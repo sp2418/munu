@@ -1,14 +1,15 @@
-import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo, useCallback } from "react"
-import { Check, ClipboardList } from "lucide-react"
+import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo, useCallback, type CSSProperties } from "react"
 
 import {
   type CarouselApi,
   Carousel,
   CarouselContent,
   CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
 } from "../components/ui/carousel"
+import LoadingScreen from "../components/LoadingScreen"
+import InsightScreen from "../components/InsightScreen"
+import PlaylistScreen from "../components/PlaylistScreen"
+import ScreenTransitionHost from "../components/ScreenTransitionHost"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { cn } from "../lib/utils"
@@ -95,6 +96,10 @@ function shouldPlayWalkthroughResultsDemo(snapshot: ResultsMountSnapshot): boole
 
 /** Slower than native `scroll-behavior: smooth`; playlist fades in after this finishes. */
 const PLAYLIST_SCROLL_DURATION_MS = 2200
+
+/** Playlist wave: floor horizon → settled behind carousel (720 viewBox cy). */
+const PLAYLIST_WAVE_FLOOR_CY = 648
+const PLAYLIST_WAVE_CAROUSEL_CY = 300
 
 /** Matches `scroll-mt-8` on the playlist `<section>`. */
 const PLAYLIST_SCROLL_MARGIN_PX = 32
@@ -264,7 +269,7 @@ function easeInOutCubic(t: number): number {
 
 function insightLoadingLineFadeClass(revealed: boolean) {
   return cn(
-    "m-0 text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground transition-opacity ease-out motion-reduce:transition-none sm:text-base",
+    "inline transition-opacity ease-out motion-reduce:transition-none",
     revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
   )
 }
@@ -282,9 +287,13 @@ const JOURNEY_LOADING_LINES = [
 function RotatingLoadingLines({
   lines,
   active,
+  className,
+  lineClassName,
 }: {
   lines: readonly string[]
   active: boolean
+  className?: string
+  lineClassName?: string
 }) {
   const [lineIndex, setLineIndex] = useState(0)
   const [fadedIn, setFadedIn] = useState(true)
@@ -345,10 +354,11 @@ function RotatingLoadingLines({
     typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
   return (
-    <div aria-live="polite" className="mx-auto max-w-lg motion-safe:animate-pulse">
+    <div aria-live="polite" className={cn("mx-auto max-w-lg", className)}>
       <p
         className={cn(
-          "text-center text-sm text-muted-foreground",
+          lineClassName ??
+            "text-center text-sm text-muted-foreground motion-safe:animate-pulse",
           !reducedMotion && "transition-opacity duration-300 ease-in-out",
           !reducedMotion && (fadedIn ? "opacity-100" : "opacity-0"),
         )}
@@ -359,32 +369,43 @@ function RotatingLoadingLines({
   )
 }
 
-/** Preview bar pinned to bottom of artwork (inside card). Omitted when there is no preview URL. */
-function CardPreviewBar({
-  previewUrl,
-  variant,
-}: {
-  previewUrl: string | null | undefined
-  variant: "on-artwork" | "on-placeholder"
-}) {
-  if (!previewUrl) return null
-
-  return (
-    <div
-      className={cn(
-        "absolute inset-x-0 bottom-0 z-10 border-t px-3 py-3 sm:py-3.5",
-        "border-white/15 bg-black/55 backdrop-blur-md supports-backdrop-filter:bg-black/45",
-        variant === "on-placeholder" &&
-          "border-white/10 bg-black/70 supports-backdrop-filter:bg-black/55",
-      )}
-    >
-      <audio controls src={previewUrl} className="block h-10 w-full sm:h-11" preload="none" />
-    </div>
+function mirrorRevealClass(revealed: boolean) {
+  return cn(
+    "transition-opacity ease-out motion-reduce:transition-none",
+    revealed ? "opacity-100 motion-safe:duration-[1400ms]" : "opacity-0 motion-safe:duration-0",
   )
 }
 
-const CAPTION_FADE_DELAY_MS = 420
-const CAPTION_FADE_DURATION_MS = 900
+function playlistRevealClass(revealed: boolean) {
+  return cn(
+    "transition-opacity ease-out motion-reduce:transition-none",
+    revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
+  )
+}
+
+/** Pause before album art fades in after carousel advance. */
+const JOURNEY_SLIDE_FADE_DELAY_MS = 420
+/** Extra beat after the cover starts fading before the caption fades in. */
+const JOURNEY_CAPTION_AFTER_CARD_MS = 420
+/** Opacity transition length for each song card / caption fade-in. */
+const JOURNEY_SLIDE_FADE_DURATION_MS = 900
+/** Opacity transition length for fade-out when leaving a slide. */
+const JOURNEY_SLIDE_FADE_OUT_MS = Math.min(220, JOURNEY_SLIDE_FADE_DURATION_MS)
+
+function journeySlideFadeClass(visible: boolean) {
+  return cn(
+    "transition-opacity ease-out motion-reduce:transition-none motion-reduce:opacity-100",
+    visible ? "opacity-100" : "opacity-0",
+  )
+}
+
+function journeySlideFadeStyle(visible: boolean): CSSProperties {
+  return {
+    transitionDuration: visible
+      ? `${JOURNEY_SLIDE_FADE_DURATION_MS}ms`
+      : `${JOURNEY_SLIDE_FADE_OUT_MS}ms`,
+  }
+}
 
 function formatJourneySongsForClipboard(songs: any[]): string {
   return songs
@@ -396,79 +417,6 @@ function formatJourneySongsForClipboard(songs: any[]): string {
       return `${i + 1}. ${title} — ${artist}`
     })
     .join("\n")
-}
-
-function JourneySlide({
-  song,
-  isSelected,
-}: {
-  song: any
-  isSelected: boolean
-}) {
-  const [captionVisible, setCaptionVisible] = useState(false)
-
-  useEffect(() => {
-    if (!isSelected) {
-      setCaptionVisible(false)
-      return
-    }
-
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (reducedMotion) {
-      setCaptionVisible(true)
-      return
-    }
-
-    setCaptionVisible(false)
-    const show = window.setTimeout(() => setCaptionVisible(true), CAPTION_FADE_DELAY_MS)
-    return () => window.clearTimeout(show)
-  }, [isSelected])
-
-  return (
-    <div className="flex w-full flex-col items-center gap-4">
-      <div
-        className={cn(
-          "relative w-full max-w-[min(100%,28rem)] shrink-0 overflow-hidden rounded-2xl border-2 shadow-md animate-in fade-in duration-300",
-          song.imageUrl ? "border-border bg-card" : "border-border/60 bg-zinc-900 dark:bg-zinc-950",
-        )}
-      >
-        {song.imageUrl ? (
-          <img
-            src={song.imageUrl}
-            alt=""
-            className="block max-h-[min(60svh,36rem)] w-full bg-muted object-contain dark:bg-zinc-900"
-          />
-        ) : (
-          <div
-            aria-hidden
-            className="flex min-h-[12rem] w-full flex-col justify-end bg-gradient-to-b from-zinc-800 to-zinc-950 sm:min-h-[13rem]"
-          />
-        )}
-        <CardPreviewBar
-          previewUrl={song.previewUrl}
-          variant={song.imageUrl ? "on-artwork" : "on-placeholder"}
-        />
-      </div>
-      <div
-        aria-hidden={!captionVisible}
-        className={cn(
-          "mx-auto w-full max-w-[min(100%,28rem)] space-y-2 px-1 text-center",
-          "motion-reduce:transition-none motion-reduce:opacity-100",
-          "transition-opacity ease-out",
-          captionVisible ? "opacity-100" : "opacity-0",
-        )}
-        style={{
-          transitionDuration: captionVisible ? `${CAPTION_FADE_DURATION_MS}ms` : `${Math.min(220, CAPTION_FADE_DURATION_MS)}ms`,
-        }}
-      >
-        <p className="text-lg font-semibold tracking-tight text-foreground">{song.title}</p>
-        <p className="text-foreground text-sm sm:text-base">by {song.artist}</p>
-        {song.explanation ? (
-          <p className="text-foreground pt-1 text-sm leading-snug sm:text-base">{song.explanation}</p>
-        ) : null}
-      </div>
-    </div>
-  )
 }
 
 interface ResultsProps {
@@ -558,6 +506,10 @@ function Results({
 
   const [journeyCarouselApi, setJourneyCarouselApi] = useState<CarouselApi | null>(null)
   const [journeySnapIndex, setJourneySnapIndex] = useState(0)
+  const [displayedSnapIndex, setDisplayedSnapIndex] = useState(0)
+  const [journeyCardVisible, setJourneyCardVisible] = useState(true)
+  const [journeyCaptionVisible, setJourneyCaptionVisible] = useState(true)
+  const prevJourneySnapRef = useRef(0)
   const [playlistListCopied, setPlaylistListCopied] = useState(false)
   const [playlistCopyFailed, setPlaylistCopyFailed] = useState(false)
   const playlistCopyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -568,6 +520,10 @@ function Results({
   )
 
   useEffect(() => {
+    prevJourneySnapRef.current = 0
+    setDisplayedSnapIndex(0)
+    setJourneyCardVisible(true)
+    setJourneyCaptionVisible(true)
     setPlaylistListCopied(false)
     setPlaylistCopyFailed(false)
     if (playlistCopyResetTimerRef.current) {
@@ -1275,6 +1231,42 @@ function Results({
     }
   }, [journeyCarouselApi])
 
+  useLayoutEffect(() => {
+    if (prevJourneySnapRef.current === journeySnapIndex) return
+    prevJourneySnapRef.current = journeySnapIndex
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      setDisplayedSnapIndex(journeySnapIndex)
+      setJourneyCardVisible(true)
+      setJourneyCaptionVisible(true)
+      return undefined
+    }
+
+    setJourneyCardVisible(false)
+    setJourneyCaptionVisible(false)
+
+    const swapTimer = window.setTimeout(() => {
+      setDisplayedSnapIndex(journeySnapIndex)
+    }, JOURNEY_SLIDE_FADE_OUT_MS)
+
+    const cardTimer = window.setTimeout(() => {
+      setJourneyCardVisible(true)
+    }, JOURNEY_SLIDE_FADE_OUT_MS + JOURNEY_SLIDE_FADE_DELAY_MS)
+
+    const captionTimer = window.setTimeout(() => {
+      setJourneyCaptionVisible(true)
+    }, JOURNEY_SLIDE_FADE_OUT_MS + JOURNEY_SLIDE_FADE_DELAY_MS + JOURNEY_CAPTION_AFTER_CARD_MS)
+
+    return () => {
+      window.clearTimeout(swapTimer)
+      window.clearTimeout(cardTimer)
+      window.clearTimeout(captionTimer)
+    }
+  }, [journeySnapIndex])
+
   const handleSongPreview = async (songs: any[]) => {
     const songsWithPreviews: any[] = []
     for (const song of songs){
@@ -1318,15 +1310,74 @@ function Results({
   console.log("Baseline:", profile?.baseline)
   console.log("Emotional Context", profile?.currEmotContext)
 
-  return (
-    <div className="flex min-h-svh flex-col px-6 py-10">
-      {!claudeRes ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-10 px-4 text-center">
+  const currentJourneySong = journeySongs[displayedSnapIndex] ?? journeySongs[0]
+
+  const insightFooter =
+    journeySongsLoading && journeyLinesAllowed ? (
+      <div
+        className={cn(
+          "transition-opacity ease-out motion-reduce:transition-none",
+          "motion-safe:duration-[1200ms]",
+          journeyLinesEntered ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <RotatingLoadingLines
+          lines={JOURNEY_LOADING_LINES}
+          active
+          lineClassName="arr-status m-0"
+        />
+      </div>
+    ) : playlistRevealButtonReady && !playlistRevealAllowed ? (
+      <button
+        type="button"
+        className={cn(
+          "arr-cta",
+          "transition-opacity ease-out motion-reduce:transition-none",
+          "motion-safe:duration-[1200ms]",
+          playlistCtaEntered ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        onClick={() => setPlaylistRevealAllowed(true)}
+      >
+        Show me my playlist
+      </button>
+    ) : null
+
+  const journeyCardFade = journeySlideFadeClass(journeyCardVisible)
+  const journeyCardFadeTiming = journeySlideFadeStyle(journeyCardVisible)
+  const journeyCaptionFade = journeySlideFadeClass(journeyCaptionVisible)
+  const journeyCaptionFadeTiming = journeySlideFadeStyle(journeyCaptionVisible)
+
+  const playlistGetCy = useCallback(() => {
+    const sec = playlistSectionRef.current
+    if (!sec) return PLAYLIST_WAVE_CAROUSEL_CY
+    const h = sec.offsetHeight || window.innerHeight
+    const start = sec.offsetTop - h
+    const prog = Math.max(0, Math.min(1, (window.scrollY - start) / h))
+    return PLAYLIST_WAVE_FLOOR_CY + (PLAYLIST_WAVE_CAROUSEL_CY - PLAYLIST_WAVE_FLOOR_CY) * prog
+  }, [])
+
+  const resultsScreenKey = useMemo(() => {
+    if (!claudeRes) return "loading"
+    if (!playlistRevealAllowed) return "insight"
+    return "playlist"
+  }, [claudeRes, playlistRevealAllowed])
+
+  const resultsWave = useMemo(() => {
+    if (resultsScreenKey === "playlist") return null
+    return { mode: "floor" as const, color: "var(--fill)", swell: 0.4 }
+  }, [resultsScreenKey])
+
+  let resultsContent
+
+  if (!claudeRes) {
+    resultsContent = (
+        <LoadingScreen accent="var(--fill)">
           {claudeInsightError ? (
-            <div aria-live="assertive" className="mx-auto flex w-full max-w-md flex-col items-center gap-5">
-              <p className="text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground sm:text-base">
-                {claudeInsightError}
-              </p>
+            <div
+              aria-live="assertive"
+              className="mx-auto flex w-full max-w-md flex-col items-center gap-5"
+            >
+              <p className="arr-load__title text-pretty">{claudeInsightError}</p>
               <Button
                 type="button"
                 variant="secondary"
@@ -1340,12 +1391,13 @@ function Results({
             </div>
           ) : (
             <>
-              <div aria-live="polite" className="mx-auto w-full max-w-prose space-y-2">
-                <p className={insightLoadingLineFadeClass(insightLoadingL1)}>Thanks for sharing.</p>
-                <p className={insightLoadingLineFadeClass(insightLoadingL2)}>
+              <p aria-live="polite" className="arr-load__title">
+                <span className={insightLoadingLineFadeClass(insightLoadingL1)}>Thanks for sharing.</span>
+                <br />
+                <span className={insightLoadingLineFadeClass(insightLoadingL2)}>
                   Hang tight while we put together something for you.
-                </p>
-              </div>
+                </span>
+              </p>
               <div
                 className={cn(
                   "mx-auto w-full max-w-lg transition-opacity ease-out motion-reduce:transition-none",
@@ -1355,287 +1407,220 @@ function Results({
                     : "pointer-events-none opacity-0 motion-reduce:opacity-100",
                 )}
               >
-                <RotatingLoadingLines lines={INSIGHT_LOADING_LINES} active={insightLoadingRotator && !claudeRes} />
+                <RotatingLoadingLines
+                  lines={INSIGHT_LOADING_LINES}
+                  active={insightLoadingRotator && !claudeRes}
+                  lineClassName="arr-load__sub m-0"
+                />
               </div>
             </>
           )}
-        </div>
-      ) : null}
-      {claudeRes ? (
-        <>
-          <div
-            className={cn(
-              "relative flex flex-col items-center px-4 text-center",
-              // Journey lines are position:absolute, so they don’t participate in flex layout — safe to center the insight.
-              (journeySongsLoading || !playlistRevealAllowed)
-                ? "min-h-svh justify-center"
-                : "justify-start pt-2",
-              playlistRevealAllowed ? "pb-8 sm:pb-10" : "pb-10 sm:pb-12",
-            )}
-          >
-            <div
-              className={cn(
-                "mx-auto max-w-lg space-y-5",
-                // Breathing room above absolute-positioned journey lines / playlist CTA on tight viewports.
-                ((journeySongsLoading && journeyLinesAllowed) ||
-                  (playlistRevealButtonReady && !playlistRevealAllowed)) &&
-                  "pb-8 sm:pb-10",
-              )}
+        </LoadingScreen>
+    )
+  } else if (!playlistRevealAllowed) {
+    resultsContent = (
+            <InsightScreen
+              accent="var(--fill)"
+              title="Where the music meets you now"
+              titleClassName={mirrorRevealClass(revealMirrorTitle)}
+              bodyClassName={mirrorRevealClass(revealMirrorInsight)}
+              footer={insightFooter}
             >
-              <h2
-                className={cn(
-                  "text-foreground text-xl font-semibold tracking-tight sm:text-2xl",
-                  "transition-opacity ease-out motion-reduce:transition-none",
-                  revealMirrorTitle
-                    ? "opacity-100 motion-safe:duration-[1400ms]"
-                    : "opacity-0 motion-safe:duration-0",
-                )}
-              >
-                Where the music meets you now
-              </h2>
-              <p
-                className={cn(
-                  "text-foreground text-[0.9375rem] leading-relaxed sm:text-base",
-                  "transition-opacity ease-out motion-reduce:transition-none",
-                  revealMirrorInsight
-                    ? "opacity-100 motion-safe:duration-[1400ms]"
-                    : "opacity-0 motion-safe:duration-0",
-                )}
-              >
-                {claudeRes.insight}
-              </p>
-            </div>
-            {journeySongsLoading && journeyLinesAllowed ? (
-              <div
-                className={cn(
-                  "absolute inset-x-0 bottom-12 z-10 flex justify-center px-2 sm:bottom-16 sm:px-4",
-                  "transition-opacity ease-out motion-reduce:transition-none",
-                  "motion-safe:duration-[1200ms]",
-                  journeyLinesEntered ? "opacity-100" : "opacity-0",
-                )}
-              >
-                <div className="mx-auto w-full max-w-lg">
-                  <RotatingLoadingLines lines={JOURNEY_LOADING_LINES} active />
+              {claudeRes.insight}
+            </InsightScreen>
+    )
+  } else {
+    resultsContent = (
+            <>
+              <div className="arr-insight__compact">
+                <div className="arr-insight__inner mx-auto">
+                  <h2 className="arr-insight__title">Where the music meets you now</h2>
+                  <p className="arr-insight__body">{claudeRes.insight}</p>
                 </div>
               </div>
-            ) : playlistRevealButtonReady && !playlistRevealAllowed ? (
-              <div
-                className={cn(
-                  "absolute inset-x-0 bottom-12 z-10 flex justify-center px-2 sm:bottom-16 sm:px-4",
-                  "transition-opacity ease-out motion-reduce:transition-none",
-                  "motion-safe:duration-[1200ms]",
-                  playlistCtaEntered ? "opacity-100" : "pointer-events-none opacity-0",
-                )}
+              <section
+                ref={playlistSectionRef}
+                className="scroll-mt-8"
+                aria-label="Your curated playlist"
               >
-                <Button
-                  type="button"
-                  size="lg"
-                  className="min-w-[12rem]"
-                  onClick={() => setPlaylistRevealAllowed(true)}
-                >
-                  Show me my playlist
-                </Button>
-              </div>
-            ) : null}
-          </div>
-          {playlistRevealAllowed ? (
-            <section
-              ref={playlistSectionRef}
-              className="mx-auto mt-6 w-full max-w-3xl scroll-mt-8 sm:mt-10"
-              aria-label="Your curated playlist"
-            >
-              <div className="space-y-6">
-                <h2
-                  className={cn(
-                    "text-xl font-semibold tracking-tight transition-opacity ease-out motion-reduce:transition-none",
-                    revealPlaylistHeading
-                      ? "opacity-100 motion-safe:duration-[900ms]"
-                      : "opacity-0 motion-safe:duration-0",
-                  )}
-                >
-                  Musical nutrients for the journey forward
-                </h2>
-                <div
-                  className={cn(
-                    "mx-auto w-full max-w-xl text-center transition-opacity ease-out motion-reduce:transition-none",
-                    revealPlaylistWhy
-                      ? "opacity-100 motion-safe:duration-[900ms]"
-                      : "opacity-0 motion-safe:duration-0",
-                  )}
-                >
-                  <button
-                    type="button"
-                    id={playlistWhyTriggerId}
-                    aria-expanded={playlistWhyExpanded}
-                    aria-controls={playlistWhyPanelId}
-                    className={cn(
-                      "inline cursor-pointer border-0 bg-transparent p-0 text-center text-base font-medium text-foreground",
-                      "underline decoration-foreground/40 underline-offset-4",
-                      "hover:decoration-foreground hover:opacity-90 motion-reduce:transition-none transition-opacity",
-                      "rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
-                    )}
-                    onClick={() => setPlaylistWhyExpanded((o) => !o)}
-                  >
-                    Why these songs?
-                  </button>
-                  <div
-                    id={playlistWhyPanelId}
-                    role="region"
-                    aria-labelledby={playlistWhyTriggerId}
-                    className={cn(
-                      "grid overflow-hidden motion-reduce:transition-none",
-                      "transition-[grid-template-rows] duration-500 ease-in-out motion-reduce:duration-0",
-                      playlistWhyExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                    )}
-                  >
-                    <div className="min-h-0 overflow-hidden">
-                      <div
-                        className={cn(
-                          "pt-3 text-left motion-reduce:transition-none",
-                          "transition-opacity duration-500 ease-in-out motion-reduce:duration-0",
-                          playlistWhyExpanded ? "opacity-100" : "pointer-events-none opacity-0",
-                        )}
-                      >
-                        <p className="text-foreground text-[0.9375rem] leading-relaxed sm:text-base">
-                          {claudeRes.isoExplanation}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className={cn(
-                    "transition-opacity ease-out motion-reduce:transition-none",
-                    revealPlaylistCarousel
-                      ? "opacity-100 motion-safe:duration-[900ms]"
-                      : "opacity-0 motion-safe:duration-0",
-                  )}
-                >
-                  {journeySongs.length > 0 ? (
-                    <>
+                {journeySongs.length > 0 ? (
+                  <>
+                    <div className="sr-only" aria-hidden>
                       <Carousel
                         opts={{ align: "center", loop: false }}
-                        className="w-full max-w-full"
                         setApi={setJourneyCarouselApi}
                       >
                         <CarouselContent>
                           {journeySongs.map((song: any, i: number) => (
-                            <CarouselItem key={`journey-${i}-${song.title}-${song.artist}`}>
-                              <div className="flex justify-center py-3">
-                                <JourneySlide song={song} isSelected={i === journeySnapIndex} />
-                              </div>
+                            <CarouselItem key={`journey-hidden-${i}-${song.title}-${song.artist}`}>
+                              <span>{song.title}</span>
                             </CarouselItem>
                           ))}
                         </CarouselContent>
-                        <CarouselPrevious className="left-0 border-border bg-background/90 shadow-sm sm:left-1" />
-                        <CarouselNext className="right-0 border-border bg-background/90 shadow-sm sm:right-1" />
                       </Carousel>
-                      <div className="mt-4 flex flex-col items-center gap-1.5 sm:mt-5">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-2"
-                          onClick={() => void handleCopyPlaylistList()}
-                          aria-label="Copy playlist as a plain text list of songs"
-                        >
-                          {playlistListCopied ? (
-                            <Check className="size-4 shrink-0" aria-hidden />
-                          ) : (
-                            <ClipboardList className="size-4 shrink-0" aria-hidden />
+                    </div>
+                    <PlaylistScreen
+                      accent="var(--fill)"
+                      waveGetCy={playlistGetCy}
+                      title="Musical nutrients for the journey forward"
+                      titleClassName={playlistRevealClass(revealPlaylistHeading)}
+                      song={{
+                        name: currentJourneySong?.title,
+                        artist: currentJourneySong?.artist,
+                        note: currentJourneySong?.explanation,
+                        art: currentJourneySong?.imageUrl,
+                      }}
+                      index={journeySnapIndex}
+                      count={journeySongs.length}
+                      previewBar={
+                        currentJourneySong?.previewUrl ? (
+                          <audio
+                            controls
+                            src={currentJourneySong.previewUrl}
+                            preload="none"
+                          />
+                        ) : undefined
+                      }
+                      onPrev={() => journeyCarouselApi?.scrollPrev()}
+                      onNext={() => journeyCarouselApi?.scrollNext()}
+                      onWhy={() => setPlaylistWhyExpanded((o) => !o)}
+                      whyButtonId={playlistWhyTriggerId}
+                      whyPanelId={playlistWhyPanelId}
+                      whyExpanded={playlistWhyExpanded}
+                      whyClassName={playlistRevealClass(revealPlaylistWhy)}
+                      whyPanel={
+                        <div
+                          id={playlistWhyPanelId}
+                          role="region"
+                          aria-labelledby={playlistWhyTriggerId}
+                          className={cn(
+                            "grid w-full overflow-hidden motion-reduce:transition-none",
+                            "transition-[grid-template-rows] duration-500 ease-in-out motion-reduce:duration-0",
+                            playlistWhyExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
                           )}
-                          {playlistListCopied
-                            ? "Copied!"
-                            : playlistCopyFailed
-                              ? "Copy failed — try again"
-                              : "Copy song list"}
-                        </Button>
-                        <p
-                          className="min-h-[1.25rem] text-center text-xs text-muted-foreground"
-                          aria-live="polite"
-                          role="status"
                         >
+                          <div className="min-h-0 overflow-hidden">
+                            <div
+                              className={cn(
+                                "arr-player__why-panel motion-reduce:transition-none",
+                                "transition-opacity duration-500 ease-in-out motion-reduce:duration-0",
+                                playlistWhyExpanded
+                                  ? "opacity-100"
+                                  : "pointer-events-none opacity-0",
+                              )}
+                            >
+                              <p>{claudeRes.isoExplanation}</p>
+                            </div>
+                          </div>
+                        </div>
+                      }
+                      onCopy={() => void handleCopyPlaylistList()}
+                      copyLabel={
+                        playlistListCopied
+                          ? "Copied!"
+                          : playlistCopyFailed
+                            ? "Copy failed — try again"
+                            : "Copy song list"
+                      }
+                      copyStatus={
+                        <p className="arr-player__copy-status" aria-live="polite" role="status">
                           {playlistListCopied
                             ? "Song list copied to your clipboard."
                             : playlistCopyFailed
                               ? "Clipboard access was blocked. You can try again or copy manually."
                               : "\u00a0"}
                         </p>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No songs matched for this journey.</p>
-                  )}
-                </div>
-              </div>
-              {revealPlaylistCarousel ? (
-                viviWalkthroughActive ? (
-                  <div
-                    ref={playlistReadyCtaRef}
-                    className="mt-12 flex flex-col items-center gap-6 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms] sm:mt-14"
-                  >
-                    <p className="max-w-md text-[0.9375rem] text-muted-foreground italic leading-relaxed sm:text-base">
-                      Ready to try MuNu for yourself?
-                    </p>
-                    <Button type="button" size="lg" onClick={() => onExitFollowAlongToWelcome()}>
-                      Start your own journey
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      ref={playlistReadyCtaRef}
-                      className="mt-12 flex flex-col items-center gap-6 text-center motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms] sm:mt-14"
+                      }
+                      stageClassName={playlistRevealClass(revealPlaylistCarousel)}
+                      cardClassName={revealPlaylistCarousel ? journeyCardFade : undefined}
+                      cardStyle={revealPlaylistCarousel ? journeyCardFadeTiming : undefined}
+                      captionClassName={revealPlaylistCarousel ? journeyCaptionFade : undefined}
+                      captionStyle={revealPlaylistCarousel ? journeyCaptionFadeTiming : undefined}
                     >
-                      <p className="max-w-md text-[0.9375rem] text-muted-foreground italic leading-relaxed sm:text-base">
-                        Ready for a new playlist? Start with another quick check-in.
-                      </p>
-                      <Button type="button" size="lg" onClick={() => setPlaylistReadyModalOpen(true)}>
-                        I&apos;m Ready
-                      </Button>
-                    </div>
-                    <Dialog open={playlistReadyModalOpen} onOpenChange={setPlaylistReadyModalOpen}>
-                      <DialogContent className="flex min-h-[22rem] flex-col items-center justify-center gap-8 py-8 text-center sm:max-w-lg sm:min-h-[26rem]">
-                        <DialogHeader className="flex w-full max-w-full flex-col items-center gap-4 text-center">
-                          <DialogTitle className="sr-only">Check-in options</DialogTitle>
-                          <p className="max-w-[17.5rem] shrink-0 self-center text-center text-pretty text-[0.9375rem] leading-relaxed text-muted-foreground italic sm:max-w-xs sm:text-base">
-                            Your next playlist starts with how you&apos;re feeling now. Want to update your
-                            music profile first, or jump straight into your check-in?
-                          </p>
-                        </DialogHeader>
-                        <div className="flex shrink-0 flex-row flex-wrap justify-center gap-3 self-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="min-h-11"
-                            onClick={() => {
-                              setPlaylistReadyModalOpen(false)
-                              onRebuildMusicProfile()
-                            }}
+                      {revealPlaylistCarousel ? (
+                        viviWalkthroughActive ? (
+                          <div
+                            ref={playlistReadyCtaRef}
+                            className="arr-followup motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms]"
                           >
-                            Update My Profile
-                          </Button>
-                          <Button
-                            type="button"
-                            className="min-h-11"
-                            onClick={() => {
-                              setPlaylistReadyModalOpen(false)
-                              onStartCheckInFresh()
-                            }}
-                          >
-                            Start Check-In
-                          </Button>
-                        </div>
-                      </DialogContent>
-                    </Dialog>
+                            <p className="arr-followup__hint">
+                              Ready to try MuNu for yourself?
+                            </p>
+                            <button
+                              type="button"
+                              className="arr-cta"
+                              onClick={() => onExitFollowAlongToWelcome()}
+                            >
+                              Start your own journey
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <div
+                              ref={playlistReadyCtaRef}
+                              className="arr-followup motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms]"
+                            >
+                              <p className="arr-followup__hint">
+                                Ready for a new playlist? Start with another quick check-in.
+                              </p>
+                              <button
+                                type="button"
+                                className="arr-cta"
+                                onClick={() => setPlaylistReadyModalOpen(true)}
+                              >
+                                I&apos;m Ready
+                              </button>
+                            </div>
+                            <Dialog open={playlistReadyModalOpen} onOpenChange={setPlaylistReadyModalOpen}>
+                              <DialogContent className="arr-dialog flex min-h-[22rem] flex-col items-center justify-center gap-8 py-8 text-center sm:max-w-lg sm:min-h-[26rem]">
+                                <DialogHeader className="flex w-full max-w-full flex-col items-center gap-4 text-center">
+                                  <DialogTitle className="sr-only">Check-in options</DialogTitle>
+                                  <p className="arr-dialog__body sm:max-w-xs">
+                                    Your next playlist starts with how you&apos;re feeling now. Want to update your
+                                    music profile first, or jump straight into your check-in?
+                                  </p>
+                                </DialogHeader>
+                                <div className="arr-dialog__actions">
+                                  <button
+                                    type="button"
+                                    className="arr-back"
+                                    onClick={() => {
+                                      setPlaylistReadyModalOpen(false)
+                                      onRebuildMusicProfile()
+                                    }}
+                                  >
+                                    Update My Profile
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="arr-cta"
+                                    onClick={() => {
+                                      setPlaylistReadyModalOpen(false)
+                                      onStartCheckInFresh()
+                                    }}
+                                  >
+                                    Start Check-In
+                                  </button>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </>
+                        )
+                      ) : null}
+                    </PlaylistScreen>
                   </>
-                )
-              ) : null}
-            </section>
-          ) : null}
-        </>
-      ) : null}
-    </div>
+                ) : (
+                  <p className="arr-player__note px-6 py-10 text-center">No songs matched for this journey.</p>
+                )}
+              </section>
+            </>
+    )
+  }
+
+  return (
+    <ScreenTransitionHost screenKey={resultsScreenKey} wave={resultsWave}>
+      {resultsContent}
+    </ScreenTransitionHost>
   )
 }
 

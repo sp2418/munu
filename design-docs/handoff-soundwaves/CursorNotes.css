@@ -1,0 +1,20 @@
+/* CursorNotes — layer + note styles.
+   The parent must be `position: relative`. Notes sit above content (z-index 4)
+   but never block interaction (pointer-events: none). */
+
+.cursor-notes-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+.cursor-note {
+  position: absolute;
+  opacity: 0;
+  will-change: transform, opacity;
+  line-height: 1;
+  color: inherit;                 /* inherits the `color` prop from the layer */
+  font-family: inherit;
+  text-shadow: 0 1px 10px rgba(255, 255, 255, 0.7);  /* soft halo for legibility on light bg */
+}

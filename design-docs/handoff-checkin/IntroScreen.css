@@ -1,0 +1,130 @@
+/* IntroScreen — the "check-in intro" look.
+   Foundation: cream #f8f4ec + Lora. Accent comes from --accent (or the
+   `accent` prop). Pairs with SoundWave.css. */
+
+.intro-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;            /* full-screen intro; drop if it's a nested panel */
+  overflow: hidden;
+  background: #f8f4ec;
+  color: #39322a;
+  font-family: "Lora", Georgia, serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* content sits ABOVE the wave (which is z-index 0) and is centered */
+.intro-screen__content {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  min-height: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 64px;
+  box-sizing: border-box;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.intro-screen__dot {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,
+     color-mix(in oklab, var(--accent) 55%, white), var(--accent));
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--accent) 18%, transparent),
+              0 0 24px 4px color-mix(in oklab, var(--accent) 38%, transparent);
+  animation: intro-dot-pulse 9s ease-in-out infinite;
+}
+@keyframes intro-dot-pulse {
+  0%, 100% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--accent) 14%, transparent),
+                         0 0 18px 3px color-mix(in oklab, var(--accent) 30%, transparent); }
+  12%      { box-shadow: 0 0 0 9px color-mix(in oklab, var(--accent) 26%, transparent),
+                         0 0 30px 6px color-mix(in oklab, var(--accent) 52%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .intro-screen__dot { animation: none; }
+}
+
+.intro-screen__eyebrow {
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 24px 0 0;
+  white-space: nowrap;
+}
+.intro-screen__title {
+  font-family: "Lora", serif;
+  font-size: 34px;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: #39322a;
+  margin: 14px 0 0;
+  text-wrap: balance;
+}
+.intro-screen__sub {
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1.62;
+  color: #6f675b;
+  margin: 20px 0 0;
+  max-width: 30em;
+  text-wrap: pretty;
+}
+
+/* bottom footer nav: Back (outlined) left, primary action (pebble) right */
+.intro-screen__footer {
+  position: absolute;
+  left: 0; right: 0; bottom: 40px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  pointer-events: none;
+}
+.intro-screen__footer > * { pointer-events: auto; }
+
+.intro-screen__back,
+.intro-screen__next {
+  font-family: "Hanken Grotesk", system-ui, sans-serif;
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+}
+.intro-screen__back {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  transition: background .2s, border-color .2s;
+}
+.intro-screen__back:hover {
+  background: color-mix(in oklab, var(--accent) 7%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+}
+.intro-screen__next {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: color-mix(in oklab, var(--accent) 40%, #2a2030);
+  background: var(--accent);
+  padding: 15px 40px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px -2px color-mix(in oklab, var(--accent) 45%, transparent),
+              0 12px 28px -12px color-mix(in oklab, var(--accent) 55%, transparent);
+  transition: transform .2s cubic-bezier(.2,.7,.3,1), filter .2s;
+}
+.intro-screen__next:hover { transform: translateY(-2px); filter: brightness(1.05); }

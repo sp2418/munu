@@ -1,0 +1,72 @@
+/* Full-screen crossfade between steps — pairs with screenTransition.ts constants. */
+
+.screen-transition-host {
+  position: relative;
+  width: 100%;
+  min-height: 100svh;
+  background: var(--background, #f8f4ec);
+}
+
+.screen-transition-host__wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.screen-transition-layer {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 100svh;
+  background: transparent;
+}
+
+.screen-transition-layer--active {
+  pointer-events: none;
+  animation: screen-transition-enter var(--screen-enter-ms, 520ms) ease-out forwards;
+}
+
+.screen-transition-layer--interactive {
+  pointer-events: auto;
+}
+
+.screen-transition-layer--out {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  min-height: 100svh;
+  overflow: hidden;
+  pointer-events: none;
+  animation: screen-transition-fade-out var(--screen-exit-ms, 320ms) ease-out forwards;
+}
+
+@keyframes screen-transition-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes screen-transition-fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-transition-layer--active {
+    animation-duration: var(--screen-reduced-ms, 120ms);
+  }
+
+  .screen-transition-layer--out {
+    animation-duration: var(--screen-reduced-ms, 120ms);
+  }
+}

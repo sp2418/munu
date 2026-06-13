@@ -54,6 +54,8 @@ type QuestionBlockProps = {
   interactionLocked?: boolean
 } & (MultipleChoiceQuestion | SearchQuestion | TextareaQuestion)
 
+const SEARCH_PICKS_EMPTY_HINT = "Your picks will gather here."
+
 function QuestionBlock(props: QuestionBlockProps) {
   const { prompt, interactionLocked } = props
   const locked = interactionLocked === true
@@ -82,52 +84,134 @@ function QuestionBlock(props: QuestionBlockProps) {
     })
   }, [props.kind, selectedSearchCount])
 
-  return (
-    <section className="grid gap-6 text-left md:grid-cols-2 md:items-start">
-      <div className="animate-in fade-in duration-700 space-y-4">
-        <p className="text-lg leading-tight md:pr-4">{prompt}</p>
+  const questionClassName =
+    "m-0 w-full max-w-[12em] text-pretty font-serif text-[30px] font-medium leading-[1.34] tracking-[-0.008em] text-[var(--ink)]"
 
-        {props.kind === "search" && (
-          <Command
-            shouldFilter={false}
-            className={`mt-2 bg-background p-0 text-left text-foreground transition-all duration-500 [&_[data-slot=command-input-wrapper]]:p-0 ${
-              showRightContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
-            }`}
-          >
-            <CommandInput
-              className="text-left"
-              value={props.searchTerm}
-              onValueChange={locked ? () => {} : props.onSearchTermChange}
-              placeholder={props.placeholder}
-              disabled={locked}
-            />
-            <CommandList
-              className={cn(!locked && "min-h-40", locked && "pointer-events-none min-h-0 opacity-60")}
+  if (props.kind === "search") {
+    const visibleResults = locked ? [] : props.results
+
+    return (
+      <section className="grid min-h-0 flex-1 gap-8 text-left md:grid-cols-2 md:items-stretch md:gap-12">
+        <div className="min-w-0 animate-in fade-in duration-700">
+          <p className={questionClassName}>{prompt}</p>
+          <div className="munu-search-wrap mt-6 max-w-[460px]">
+            <Command shouldFilter={false} className="munu-search-picker">
+              <CommandInput
+                className="text-left"
+                value={props.searchTerm}
+                onValueChange={locked ? () => {} : props.onSearchTermChange}
+                placeholder={props.placeholder}
+                disabled={locked}
+              />
+              <CommandList
+                className={cn(
+                  "munu-search-dropdown",
+                  visibleResults.length === 0 && "hidden",
+                  locked && "pointer-events-none",
+                )}
+              >
+                {visibleResults.map((result) => (
+                  <CommandItem
+                    key={result.id}
+                    className="munu-search-opt"
+                    onSelect={() => {
+                      result.onSelect()
+                      props.onSearchTermChange("")
+                    }}
+                  >
+                    <span>{result.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandList>
+            </Command>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "munu-picks-column transition-all duration-500",
+            showRightContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
+          )}
+        >
+          {selectedSearchCount === 0 ? (
+            <p className="munu-picks-empty">{SEARCH_PICKS_EMPTY_HINT}</p>
+          ) : (
+            <div
+              ref={selectedItemsScrollRef}
+              className="munu-picks-scroll overflow-y-auto pr-1"
             >
-              {(locked ? [] : props.results).map((result) => (
-                <CommandItem
-                  key={result.id}
-                  onSelect={() => {
-                    result.onSelect()
-                    props.onSearchTermChange("")
-                  }}
-                >
-                  <span>{result.label}</span>
-                </CommandItem>
-              ))}
-            </CommandList>
-          </Command>
+              <div className="munu-picks-list">
+                {props.selectedItems?.map((item) => (
+                  <div key={item.id} className="munu-pick-card animate-in fade-in duration-300">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.label}
+                        className="munu-pick-card__media"
+                      />
+                    ) : (
+                      <span className="munu-pick-card__media" aria-hidden />
+                    )}
+                    {props.onRemoveSelectedItem && !locked && (
+                      <button
+                        type="button"
+                        className="munu-pick-card__remove"
+                        aria-label={`Remove ${item.label}`}
+                        onClick={() => props.onRemoveSelectedItem?.(item.id)}
+                      >
+                        <X strokeWidth={2.2} />
+                      </button>
+                    )}
+                    <span className="munu-pick-card__label">
+                      {item.label}
+                      {item.subtitle ? (
+                        <span className="munu-pick-card__subtitle">{item.subtitle}</span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    )
+  }
+
+  const isTextarea = props.kind === "textarea"
+
+  return (
+    <section
+      className={cn(
+        "grid gap-8 text-left",
+        isTextarea
+          ? "md:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)] md:items-start md:gap-14"
+          : "md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] md:items-center md:gap-16",
+      )}
+    >
+      <div
+        className={cn(
+          "min-w-0 animate-in fade-in space-y-4 duration-700",
+          isTextarea && "pt-1.5",
         )}
+      >
+        <p className={cn(questionClassName, "md:pr-4")}>{prompt}</p>
       </div>
 
       <div
-        className={`space-y-4 transition-all duration-500 ${
-          showRightContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
-        }`}
+        className={cn(
+          "min-w-0 space-y-4 transition-all duration-500",
+          showRightContent ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0",
+        )}
       >
         {props.kind === "multiple-choice" && (
           <div
-            className={cn("flex flex-wrap gap-3", locked && "pointer-events-none")}
+            className={cn(
+              "flex flex-wrap justify-start gap-x-[15px] gap-y-[13px]",
+              locked && "pointer-events-none",
+            )}
+            role="group"
+            aria-label={prompt}
             aria-disabled={locked}
           >
             {props.options.map((option) => {
@@ -135,9 +219,10 @@ function QuestionBlock(props: QuestionBlockProps) {
               return (
                 <Badge
                   key={option}
-                  variant={selected ? "default" : "outline"}
+                  variant="outline"
+                  aria-pressed={selected}
                   className={cn(
-                    "h-auto min-h-10 rounded-xl px-4 py-2.5 text-sm leading-snug",
+                    "munu-chip",
                     locked ? "cursor-default select-none" : "cursor-pointer",
                     locked && !selected && "opacity-45",
                   )}
@@ -150,66 +235,9 @@ function QuestionBlock(props: QuestionBlockProps) {
           </div>
         )}
 
-        {props.kind === "search" && !!props.selectedItems?.length && (
-          <div
-            ref={selectedItemsScrollRef}
-            className="max-h-96 overflow-y-hidden pr-1 hover:overflow-y-auto focus-within:overflow-y-auto"
-          >
-            <div className="flex flex-wrap gap-3">
-            {props.selectedItems.map((item) => (
-              item.imageUrl ? (
-                <div
-                  key={item.id}
-                  className="group relative w-40 animate-in fade-in duration-300 overflow-hidden rounded-xl border border-border bg-card"
-                >
-                  <img
-                    src={item.imageUrl}
-                    alt={item.label}
-                    className="h-28 w-full object-cover transition-opacity duration-300 group-hover:opacity-40"
-                  />
-                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1 px-2 text-center opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-                    <p className="line-clamp-2 text-sm font-semibold text-black drop-shadow-sm">{item.label}</p>
-                    {item.subtitle && (
-                      <p className="line-clamp-2 text-xs text-black/90 drop-shadow-sm">{item.subtitle}</p>
-                    )}
-                  </div>
-                  {props.onRemoveSelectedItem && !locked && (
-                    <button
-                      type="button"
-                      className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
-                      onClick={() => props.onRemoveSelectedItem?.(item.id)}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <div
-                  key={item.id}
-                  className="group relative flex h-28 w-40 animate-in fade-in flex-col items-center justify-center gap-1 rounded-xl border border-border/60 bg-zinc-900 px-2 py-2 text-center duration-300 dark:bg-zinc-950"
-                >
-                  <p className="line-clamp-3 text-sm font-medium text-zinc-50">{item.label}</p>
-                  {item.subtitle && (
-                    <p className="line-clamp-2 text-xs text-zinc-300">{item.subtitle}</p>
-                  )}
-                  {props.onRemoveSelectedItem && !locked && (
-                    <button
-                      type="button"
-                      className="absolute top-1 right-1 rounded-full bg-background/80 p-1 hover:bg-background"
-                      onClick={() => props.onRemoveSelectedItem?.(item.id)}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  )}
-                </div>
-              )
-            ))}
-            </div>
-          </div>
-        )}
-
         {props.kind === "textarea" && (
           <Textarea
+            className="munu-field w-full min-w-0"
             value={props.value}
             onChange={props.onChange}
             placeholder={props.placeholder}

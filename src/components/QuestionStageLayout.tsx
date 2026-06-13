@@ -18,6 +18,8 @@ export const QUESTION_HINT_AUTO_HIDE_MS = 5000
 /** Fade duration when the hint appears or disappears (milliseconds). */
 export const QUESTION_HINT_FADE_MS = 700
 
+export type QuestionStageContentVariant = "centered" | "search-picker"
+
 interface QuestionStageLayoutProps {
   currentQuestion: number
   totalQuestions: number
@@ -28,6 +30,8 @@ interface QuestionStageLayoutProps {
   /** Shown in tiny text above the Next button when the parent blocks advancing (e.g. empty answer). */
   nextFooterHint?: string | null
   questionKey: string
+  /** Top-pinned body only for search-picker; all other steps stay vertically centered. */
+  contentVariant?: QuestionStageContentVariant
   children: ReactNode
 }
 
@@ -40,8 +44,10 @@ function QuestionStageLayout({
   nextLabel = "Next",
   nextFooterHint = null,
   questionKey,
+  contentVariant = "centered",
   children,
 }: QuestionStageLayoutProps) {
+  const isSearchPicker = contentVariant === "search-picker"
   const [renderedHint, setRenderedHint] = useState<string | null>(null)
   const [hintOpaque, setHintOpaque] = useState(false)
   const renderedHintRef = useRef(renderedHint)
@@ -121,22 +127,49 @@ function QuestionStageLayout({
   }, [nextFooterHint])
 
   return (
-    <div className="flex min-h-svh items-center justify-center px-6 py-10">
-      <div className="w-full max-w-3xl">
-        <div className="min-h-[520px] space-y-4">
-          <div className="flex justify-end">
-            <p className="text-sm text-muted-foreground">
-              Question {currentQuestion} of {totalQuestions}
-            </p>
-          </div>
-          <div className="min-h-[420px] flex items-start pt-8">
-            <div key={questionKey} className="w-full">
+    <div
+      className={cn(
+        "relative flex min-h-svh flex-col overflow-hidden font-serif text-[var(--ink)] antialiased",
+        isSearchPicker && "munu-question-stage--search-picker",
+      )}
+    >
+      <p className="absolute top-10 right-12 z-[2] m-0 whitespace-nowrap font-ui text-sm font-medium tracking-[0.01em] text-[var(--ink-faint)]">
+        Question <b className="font-semibold text-[var(--accent-text)]">{currentQuestion}</b> of{" "}
+        {totalQuestions}
+      </p>
+
+      <div className="relative z-[1] flex flex-1 flex-col">
+        <div
+          className={cn(
+            "flex flex-1 px-6 py-10 sm:px-12 lg:px-16",
+            isSearchPicker
+              ? "min-h-0 items-start lg:pt-[84px] lg:pb-4"
+              : "items-center lg:pt-[76px] lg:pb-6",
+          )}
+        >
+          <div
+            className={cn(
+              "mx-auto w-full max-w-6xl",
+              isSearchPicker && "flex min-h-0 flex-1 flex-col",
+            )}
+          >
+            <div
+              key={questionKey}
+              className={cn("w-full", isSearchPicker && "flex min-h-0 flex-1 flex-col")}
+            >
               {children}
             </div>
           </div>
         </div>
-        <div className="mt-6 flex items-end justify-between gap-4">
-          <Button type="button" variant="outline" onClick={onBack} disabled={isBackDisabled}>
+
+        <div className="relative z-[1] mt-6 flex items-end justify-between gap-4 px-6 pb-10 sm:px-12 lg:px-16 lg:pb-12">
+          <Button
+            type="button"
+            variant="outline"
+            className="munu-btn-ghost"
+            onClick={onBack}
+            disabled={isBackDisabled}
+          >
             Back
           </Button>
           <div className="flex min-w-0 flex-col items-end gap-1">
@@ -144,7 +177,7 @@ function QuestionStageLayout({
               <p
                 aria-live="polite"
                 className={cn(
-                  "max-w-[15rem] text-pretty text-right text-[0.6875rem] leading-[1.4] text-muted-foreground transition-opacity ease-out motion-reduce:transition-none sm:max-w-[17rem]",
+                  "max-w-[15rem] text-pretty text-right font-ui text-[0.6875rem] leading-[1.4] text-[var(--ink-muted)] transition-opacity ease-out motion-reduce:transition-none sm:max-w-[17rem]",
                   hintOpaque ? "opacity-100" : "opacity-0",
                 )}
                 style={{
@@ -158,7 +191,7 @@ function QuestionStageLayout({
                 {renderedHint}
               </p>
             ) : null}
-            <Button type="button" onClick={onNext}>
+            <Button type="button" className="munu-btn-primary" onClick={onNext}>
               {nextLabel}
             </Button>
           </div>

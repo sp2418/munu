@@ -1,0 +1,49 @@
+/* SoundWave — ambient layer styles.
+   The parent that contains <SoundWave/> must be `position: relative`, and your
+   actual content should sit above it (give content `position: relative; z-index: 1`). */
+
+.sound-wave {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;   /* never blocks clicks/taps underneath */
+}
+.sound-wave svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* center: dissolve across the middle so centered text stays clean; the wave
+   reads at the left/right margins. Use for hero / centered-content screens. */
+.sound-wave--center svg {
+  -webkit-mask: linear-gradient(to right,
+     #000 0%, #000 7%, transparent 16%, transparent 84%, #000 93%, #000 100%);
+          mask: linear-gradient(to right,
+     #000 0%, #000 7%, transparent 16%, transparent 84%, #000 93%, #000 100%);
+}
+
+/* floor: a low horizon that eases in from both edges. Use for most screens
+   (the wave sits below the content). */
+.sound-wave--floor svg {
+  -webkit-mask: linear-gradient(to right,
+     transparent 0%, #000 12%, #000 88%, transparent 100%);
+          mask: linear-gradient(to right,
+     transparent 0%, #000 12%, #000 88%, transparent 100%);
+}
+
+/* band: full-width wave behind a carousel row (edge fade matches floor screens). */
+.sound-wave--band svg {
+  -webkit-mask: linear-gradient(to right,
+     transparent 0%, #000 12%, #000 88%, transparent 100%);
+          mask: linear-gradient(to right,
+     transparent 0%, #000 12%, #000 88%, transparent 100%);
+}
+
+/* Welcome: full-width wave behind centered copy (no side-only mask). */
+.sound-wave.welcome-sound-wave.sound-wave--center svg {
+  -webkit-mask: none;
+  mask: none;
+}
