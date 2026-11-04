@@ -100,9 +100,12 @@ async function fetchFromApi() {
   const { viviMusicBaseline } = await import("../src/personas/vivi-music-baseline.ts")
   const { viviCurrEmotContext } = await import("../src/personas/vivi-curr-emot-context.ts")
 
-  const url = `${API}/api/claude?baseline=${encodeURIComponent(JSON.stringify(viviMusicBaseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(viviCurrEmotContext))}`
   console.log("Fetching Claude response (may take a minute)…")
-  const response = await fetch(url)
+  const response = await fetch(`${API}/api/claude`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ baseline: viviMusicBaseline, currEmotContext: viviCurrEmotContext }),
+  })
   const data = await response.json()
   if (!response.ok) throw new Error(data.error ?? `HTTP ${response.status}`)
   if (typeof data.response !== "string") throw new Error("Missing model response")

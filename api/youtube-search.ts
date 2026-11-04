@@ -8,7 +8,6 @@ function getSupabase(): SupabaseClient {
   if (supabase) return supabase
   const url = process.env.SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  console.log("Key loaded length:", process.env.SUPABASE_SERVICE_ROLE_KEY?.length ?? "UNDEFINED");
   if (!url || !key) {
     throw new Error(
       "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Add them to .env and restart the local API server."

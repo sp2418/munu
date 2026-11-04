@@ -1082,8 +1082,11 @@ function Results({
     const fetchClaudeResponse = async (attempt = 0, maxAttempts = 4) => {
       if (!cancelled) setClaudeInsightError(null)
       try {
-        const url = `/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`
-        const response = await fetch(url)
+        const response = await fetch("/api/claude", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ baseline, currEmotContext }),
+        })
         const data = (await response.json()) as { response?: string; error?: string }
 
         if (!response.ok) {

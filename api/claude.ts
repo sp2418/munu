@@ -146,14 +146,24 @@ async function withAnthropicBackoff<T>(
 }
 
 export default async function handleClaude(req: VercelRequest, res: VercelResponse) {
-    const { baseline: baselineRaw, currEmotContext: currEmotContextRaw } = req.query
-    console.log("req.query:", req.query)
+    if (req.method !== "POST") {
+        res.setHeader("Allow", "POST")
+        return res.status(405).json({ error: "Method not allowed" })
+    }
 
-    console.log("baselineRaw:", baselineRaw)
-    console.log("currEmotContextRaw:", currEmotContextRaw)
+    // Check-in text is sensitive: keep it in the POST body and out of URLs and logs.
+    let body: Partial<handleClaude> | null
+    try {
+        body = (typeof req.body === "string" ? JSON.parse(req.body) : req.body) as Partial<handleClaude> | null
+    } catch {
+        return res.status(400).json({ error: "Invalid JSON body" })
+    }
 
-    const baseline = JSON.parse(baselineRaw as string) as handleClaude['baseline']
-    const currEmotContext = JSON.parse(currEmotContextRaw as string) as handleClaude['currEmotContext']
+    const baseline = body?.baseline
+    const currEmotContext = body?.currEmotContext
+    if (!Array.isArray(baseline?.favGenres) || !Array.isArray(currEmotContext?.currTracks)) {
+        return res.status(400).json({ error: "Expected JSON body: { baseline, currEmotContext }" })
+    }
 
     const claudeAPIKey = process.env.CLAUDE_API_KEY
     if (!claudeAPIKey) {
@@ -268,7 +278,6 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
 
         `
 
-    console.log("prompt", prompt)
 
     const client = new Anthropic({
         apiKey: claudeAPIKey,
