@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
+import { deleteOldUsageCounts } from "./_limits.js"
 import {
   cacheKey,
   cacheVideoId,
@@ -173,6 +174,7 @@ export default async function handleNightlyCache(req: VercelRequest, res: Vercel
     const grow = await growSavedSongs(dryRun, startedAt).catch((err: unknown) => ({
       error: err instanceof Error ? err.message : "Couldn't grow saved songs",
     }))
+    if (!dryRun) await deleteOldUsageCounts()
     const report = { dryRun, recheck, grow, seconds: Math.round((Date.now() - startedAt) / 1000) }
     console.log("[nightly-cache]", JSON.stringify(report))
     return res.status(200).json(report)

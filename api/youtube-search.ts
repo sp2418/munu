@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
+import { consumeSearch } from "./_limits.js"
 import {
   cacheKey,
   cacheVideoId,
@@ -12,10 +13,17 @@ import {
 async function resolveVideoId(
   song: SongRef,
   state: { outOfSearches: boolean },
+  req: VercelRequest,
+  res: VercelResponse,
 ): Promise<string | null> {
   const key = cacheKey(song)
   const cached = await getCachedVideoId(key)
   if (cached) return cached
+
+  if (!state.outOfSearches && !(await consumeSearch(req, res))) {
+    // This person has used their share, but today's searches may not be gone.
+    return null
+  }
 
   if (!state.outOfSearches) {
     const { videoId, quotaExceeded } = await searchYoutube(song)
@@ -54,7 +62,7 @@ export default async function handleYoutubeSearch(req: VercelRequest, res: Verce
     const searchState = { outOfSearches: false }
 
     for (const song of journeySongs.slice(0, 10)) {
-      const videoId = await resolveVideoId(song, searchState)
+      const videoId = await resolveVideoId(song, searchState, req, res)
       if (videoId) {
         tracks.push({ videoId, title: song.title, artist: song.artist })
       }

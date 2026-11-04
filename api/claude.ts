@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import Anthropic from "@anthropic-ai/sdk"
+import { consumePlaylist } from "./_limits.js"
 
 type CurrTrack =
     | [string, string[]]
@@ -170,6 +171,11 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         return res.status(500).json({ error: 'Missing Anthropic API key' })
     }
 
+    const allowance = await consumePlaylist(req, res)
+    if (allowance.blockedBy) {
+        return res.status(429).json({ error: "Daily limit reached", limit: allowance.blockedBy })
+    }
+
     const recentTracksFormatted = currEmotContext.currTracks
         .map((t) => formatCurrTrackLine(t))
         .filter(Boolean)
@@ -304,8 +310,11 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
             return res.status(200).json({ response: block.text })
         }
         console.error("[claude] unexpected content block:", block?.type)
+        await allowance.release()
         return res.status(500).json({ error: "Unexpected response shape from model" })
     } catch (err) {
+        // Only playlists that get made count towards someone's limit.
+        await allowance.release()
         const status = httpStatusFromError(err)
         console.error("[claude] messages.create failed:", err)
         if (status !== undefined && isRetryableAnthropicHttpStatus(status)) {

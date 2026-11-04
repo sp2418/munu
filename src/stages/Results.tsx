@@ -472,6 +472,7 @@ function Results({
   /** Shown when /api/claude fails after retries; bump `claudeRetryTick` to retry. */
   const [claudeInsightError, setClaudeInsightError] = useState<string | null>(null)
   const [claudeRetryTick, setClaudeRetryTick] = useState(0)
+  const [dailyLimitReached, setDailyLimitReached] = useState(false)
   // const [previews, setPreviews] = useState<any[]>([])
 
   const [insightLoadingL1, setInsightLoadingL1] = useState(false)
@@ -1087,7 +1088,22 @@ function Results({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ baseline, currEmotContext }),
         })
-        const data = (await response.json()) as { response?: string; error?: string }
+        const data = (await response.json()) as {
+          response?: string
+          error?: string
+          limit?: "device" | "connection" | "app"
+        }
+
+        if (data.limit) {
+          if (cancelled) return
+          setDailyLimitReached(true)
+          setClaudeInsightError(
+            data.limit === "app"
+              ? "MuNu has reached today's limit for new playlists. Please come back tomorrow."
+              : "You've made today's playlists. Please come back tomorrow for a new one.",
+          )
+          return
+        }
 
         if (!response.ok) {
           lastHttpStatus = response.status
@@ -1463,16 +1479,22 @@ function Results({
               className="mx-auto flex w-full max-w-md flex-col items-center gap-5"
             >
               <p className="arr-load__title text-pretty">{claudeInsightError}</p>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setClaudeInsightError(null)
-                  setClaudeRetryTick((t) => t + 1)
-                }}
-              >
-                Try again
-              </Button>
+              {dailyLimitReached ? (
+                <Button type="button" variant="secondary" onClick={onExitFollowAlongToWelcome}>
+                  See the demo instead
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setClaudeInsightError(null)
+                    setClaudeRetryTick((t) => t + 1)
+                  }}
+                >
+                  Try again
+                </Button>
+              )}
             </div>
           ) : (
             <>
