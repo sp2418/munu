@@ -1,13 +1,12 @@
-import type { MusicBaseline } from "./reccobeatsEnrich"
+import type { CurrEmotContext, DesiredFeelingId, MusicBaseline } from "./reccobeatsEnrich"
 
 const ONBOARDING_DRAFT_KEY = "munu.onboardingDraft.v1"
 
 export type OnboardingDraft = {
   listGenres: string[]
-  listContexts: string[]
-  additionalContext: string
-  listOfArtists: Array<{ id: string; name: string; imageUrl: string }>
-  listOfTracks: Array<{ id: string; name: string; artists: string[]; imageUrl: string }>
+  currRant: string
+  currTracks: Array<{ id: string; name: string; artists: string[]; imageUrl: string }>
+  desiredFeeling: DesiredFeelingId | ""
 }
 
 function parseJson<T>(raw: string | null): T | null {
@@ -22,8 +21,13 @@ function parseJson<T>(raw: string | null): T | null {
 export function readOnboardingDraft(): OnboardingDraft | null {
   if (typeof sessionStorage === "undefined") return null
   const data = parseJson<OnboardingDraft>(sessionStorage.getItem(ONBOARDING_DRAFT_KEY))
-  if (!data || !Array.isArray(data.listGenres)) return null
-  return data
+  if (!data || !Array.isArray(data.listGenres) || !Array.isArray(data.currTracks)) return null
+  return {
+    listGenres: data.listGenres,
+    currRant: typeof data.currRant === "string" ? data.currRant : "",
+    currTracks: data.currTracks,
+    desiredFeeling: typeof data.desiredFeeling === "string" ? data.desiredFeeling : "",
+  }
 }
 
 export function writeOnboardingDraft(draft: OnboardingDraft): void {
@@ -40,57 +44,58 @@ export function clearOnboardingDraft(): void {
   sessionStorage.removeItem(ONBOARDING_DRAFT_KEY)
 }
 
-/** When a full baseline was saved to localStorage, prefer that over the session draft. */
-export function readOnboardingDraftOrBaseline(): OnboardingDraft | null {
+function currTracksFromPersisted(
+  rows: CurrEmotContext["currTracks"] | undefined,
+): OnboardingDraft["currTracks"] {
+  const currTracks: OnboardingDraft["currTracks"] = []
+  for (const t of rows ?? []) {
+    if (Array.isArray(t)) {
+      const row = t as unknown[]
+      const name = row[0]
+      const artists = row[1]
+      if (typeof name !== "string" || !Array.isArray(artists)) continue
+      const id = typeof row[2] === "string" && row[2] ? row[2] : `anon:${name}`
+      const maybeMeta = row[3]
+      const imageUrl =
+        typeof maybeMeta === "object" &&
+        maybeMeta !== null &&
+        "imageUrl" in maybeMeta &&
+        typeof (maybeMeta as { imageUrl?: string }).imageUrl === "string"
+          ? (maybeMeta as { imageUrl: string }).imageUrl
+          : ""
+      currTracks.push({ id, name, artists: artists as string[], imageUrl })
+    } else if (t && typeof t === "object" && "id" in t && typeof t.id === "string") {
+      currTracks.push({
+        id: t.id,
+        name: typeof t.name === "string" ? t.name : "",
+        artists: Array.isArray(t.artists) ? t.artists.map(String) : [],
+        imageUrl: typeof t.imageUrl === "string" ? t.imageUrl : "",
+      })
+    }
+  }
+  return currTracks
+}
+
+/** Prefer saved localStorage profile over the in-progress session draft. */
+export function readOnboardingDraftOrStorage(): OnboardingDraft | null {
   if (typeof localStorage !== "undefined") {
-    const raw = localStorage.getItem("musicBaseline")
-    if (raw) {
+    const rawB = localStorage.getItem("musicBaseline")
+    const rawC = localStorage.getItem("currEmotContext")
+    if (rawB || rawC) {
       try {
-        const baseline = JSON.parse(raw) as MusicBaseline
-        return baselineToDraft(baseline)
+        const baseline = rawB ? (JSON.parse(rawB) as MusicBaseline) : null
+        const checkIn = rawC ? (JSON.parse(rawC) as CurrEmotContext) : null
+        return {
+          listGenres: [...(baseline?.favGenres ?? [])],
+          currRant: typeof checkIn?.currRant === "string" ? checkIn.currRant : "",
+          currTracks: currTracksFromPersisted(checkIn?.currTracks),
+          desiredFeeling:
+            typeof checkIn?.desiredFeeling === "string" ? checkIn.desiredFeeling : "",
+        }
       } catch {
         /* fall through */
       }
     }
   }
   return readOnboardingDraft()
-}
-
-function baselineToDraft(baseline: MusicBaseline): OnboardingDraft {
-  const listOfArtists: OnboardingDraft["listOfArtists"] = []
-  for (const a of baseline.favArtists ?? []) {
-    if (typeof a === "string" && a.trim()) {
-      listOfArtists.push({ id: a, name: a, imageUrl: "" })
-    } else if (a && typeof a === "object" && "id" in a && "name" in a) {
-      listOfArtists.push({
-        id: String(a.id),
-        name: String(a.name),
-        imageUrl: typeof a.imageUrl === "string" ? a.imageUrl : "",
-      })
-    }
-  }
-
-  const listOfTracks: OnboardingDraft["listOfTracks"] = []
-  for (const row of baseline.favTracks ?? []) {
-    if (!Array.isArray(row) || row.length < 2) continue
-    const name = row[0]
-    const artists = row[1]
-    if (typeof name !== "string" || !Array.isArray(artists)) continue
-    const id = typeof row[2] === "string" && row[2] ? row[2] : `anon:${name}`
-    const imageUrl =
-      typeof row[3] === "string"
-        ? row[3]
-        : row[3] && typeof row[3] === "object" && "imageUrl" in row[3]
-          ? String((row[3] as { imageUrl?: string }).imageUrl ?? "")
-          : ""
-    listOfTracks.push({ id, name, artists: artists as string[], imageUrl })
-  }
-
-  return {
-    listGenres: [...(baseline.favGenres ?? [])],
-    listContexts: [...(baseline.personalContexts ?? [])],
-    additionalContext: typeof baseline.addContext === "string" ? baseline.addContext : "",
-    listOfArtists,
-    listOfTracks,
-  }
 }

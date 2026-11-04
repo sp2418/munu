@@ -62,23 +62,6 @@ function sortedKey(values: string[]): string {
   return [...values].sort().join("\0")
 }
 
-function artistIdsFromBaseline(baseline: MusicBaseline): string[] {
-  const ids: string[] = []
-  for (const a of baseline.favArtists ?? []) {
-    if (typeof a === "string" && a.trim()) ids.push(a.trim())
-    else if (a && typeof a === "object" && "id" in a && typeof a.id === "string") ids.push(a.id)
-  }
-  return ids.sort()
-}
-
-function trackIdsFromBaseline(baseline: MusicBaseline): string[] {
-  const ids: string[] = []
-  for (const row of baseline.favTracks ?? []) {
-    if (Array.isArray(row) && typeof row[2] === "string" && row[2]) ids.push(row[2])
-  }
-  return ids.sort()
-}
-
 function trackIdsFromCheckIn(checkIn: CurrEmotContext): string[] {
   const ids: string[] = []
   for (const t of checkIn.currTracks ?? []) {
@@ -97,16 +80,9 @@ export function storedProfileMatchesVivi(
   baseline: MusicBaseline,
   checkIn: CurrEmotContext,
 ): boolean {
-  if (baseline.addContext !== viviMusicBaseline.addContext) return false
   if (checkIn.currRant !== viviCurrEmotContext.currRant) return false
+  if (checkIn.desiredFeeling !== viviCurrEmotContext.desiredFeeling) return false
   if (sortedKey(baseline.favGenres) !== sortedKey(viviMusicBaseline.favGenres)) return false
-  if (sortedKey(checkIn.emotions) !== sortedKey(viviCurrEmotContext.emotions)) return false
-  if (artistIdsFromBaseline(baseline).join(",") !== artistIdsFromBaseline(viviMusicBaseline).join(",")) {
-    return false
-  }
-  if (trackIdsFromBaseline(baseline).join(",") !== trackIdsFromBaseline(viviMusicBaseline).join(",")) {
-    return false
-  }
   if (trackIdsFromCheckIn(checkIn).join(",") !== trackIdsFromCheckIn(viviCurrEmotContext).join(",")) {
     return false
   }

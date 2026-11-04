@@ -25,12 +25,15 @@ interface QuestionStageLayoutProps {
   totalQuestions: number
   onBack: () => void
   onNext: () => void
+  /** Optional tertiary action (e.g. keep existing answer and continue). */
+  onSkip?: () => void
+  skipLabel?: string
   isBackDisabled?: boolean
   nextLabel?: string
   /** Shown in tiny text above the Next button when the parent blocks advancing (e.g. empty answer). */
   nextFooterHint?: string | null
   questionKey: string
-  /** Top-pinned body only for search-picker; all other steps stay vertically centered. */
+  /** Search-picker stays top-pinned so the results dropdown has room; others center. */
   contentVariant?: QuestionStageContentVariant
   children: ReactNode
 }
@@ -40,6 +43,8 @@ function QuestionStageLayout({
   totalQuestions,
   onBack,
   onNext,
+  onSkip,
+  skipLabel = "Skip",
   isBackDisabled = false,
   nextLabel = "Next",
   nextFooterHint = null,
@@ -129,22 +134,24 @@ function QuestionStageLayout({
   return (
     <div
       className={cn(
-        "relative flex min-h-svh flex-col overflow-hidden font-serif text-[var(--ink)] antialiased",
+        "munu-question-stage relative flex h-full min-h-svh flex-col overflow-hidden font-serif text-[var(--ink)] antialiased",
         isSearchPicker && "munu-question-stage--search-picker",
       )}
     >
-      <p className="absolute top-10 right-12 z-[2] m-0 whitespace-nowrap font-ui text-sm font-medium tracking-[0.01em] text-[var(--ink-faint)]">
+      <p className="munu-question-stage__progress absolute top-10 right-12 z-[2] m-0 whitespace-nowrap font-ui text-sm font-medium tracking-[0.01em] text-[var(--ink-faint)]">
         Question <b className="font-semibold text-[var(--accent-text)]">{currentQuestion}</b> of{" "}
         {totalQuestions}
       </p>
 
-      <div className="relative z-[1] flex flex-1 flex-col">
+      <div className="relative z-[1] flex min-h-0 flex-1 flex-col">
         <div
           className={cn(
-            "flex flex-1 px-6 py-10 sm:px-12 lg:px-16",
+            "munu-question-stage__body flex min-h-0 flex-1 flex-col px-6 sm:px-12 lg:px-16",
             isSearchPicker
-              ? "min-h-0 items-start lg:pt-[84px] lg:pb-4"
-              : "items-center lg:pt-[76px] lg:pb-6",
+              ? // Brand is absolutely overlaid on --fit onboarding; clear it at every width.
+                "justify-start pt-[calc(var(--munu-flow-brand-height,6.6rem)+0.75rem)] pb-[calc(var(--munu-floor-cta-bottom,2.5rem)+5.5rem)]"
+              : // Equal top/bottom padding so justify-center lands on the page midpoint.
+                "justify-center py-[calc(var(--munu-floor-cta-bottom,2.5rem)+5.5rem)]",
           )}
         >
           <div
@@ -162,7 +169,7 @@ function QuestionStageLayout({
           </div>
         </div>
 
-        <div className="relative z-[1] mt-6 flex items-end justify-between gap-4 px-6 pb-10 sm:px-12 lg:px-16 lg:pb-12">
+        <div className="munu-floor-cta munu-question-stage__footer">
           <Button
             type="button"
             variant="outline"
@@ -191,9 +198,21 @@ function QuestionStageLayout({
                 {renderedHint}
               </p>
             ) : null}
-            <Button type="button" className="munu-btn-primary" onClick={onNext}>
-              {nextLabel}
-            </Button>
+            <div className="flex items-center gap-2">
+              {onSkip ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="munu-btn-ghost"
+                  onClick={onSkip}
+                >
+                  {skipLabel}
+                </Button>
+              ) : null}
+              <Button type="button" className="munu-btn-primary" onClick={onNext}>
+                {nextLabel}
+              </Button>
+            </div>
           </div>
         </div>
       </div>

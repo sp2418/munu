@@ -28,7 +28,7 @@ const exportCandidates = [
 const exportPath = exportCandidates.find((p) => existsSync(p))
 const outPath = join(root, "src/personas/vivi-results.ts")
 
-const API = "http://127.0.0.1:3001"
+const API = process.env.MUNU_API_URL || "http://127.0.0.1:3001"
 
 async function spotifyToken() {
   const res = await fetch(`${API}/api/spotify-token`)
@@ -116,12 +116,14 @@ async function fetchFromApi() {
 }
 
 let payload
+let fetchedFromApi = false
 if (exportPath) {
   console.log("Reading", exportPath)
   payload = JSON.parse(readFileSync(exportPath, "utf8"))
 } else {
   console.log("No export file — calling API at", API)
   payload = await fetchFromApi()
+  fetchedFromApi = true
 }
 
 if (!payload?.parsed?.insight || !Array.isArray(payload.journeySongsResolved)) {
@@ -129,6 +131,12 @@ if (!payload?.parsed?.insight || !Array.isArray(payload.journeySongsResolved)) {
 }
 if (payload.journeySongsResolved.length === 0) {
   throw new Error("journeySongsResolved is empty")
+}
+
+if (fetchedFromApi) {
+  const exportOut = join(root, "scripts/bake-vivi-results-export.json")
+  writeFileSync(exportOut, JSON.stringify(payload, null, 2) + "\n")
+  console.log("Wrote", exportOut)
 }
 
 const out = `/** Resolved carousel row after Spotify verify + optional iTunes preview. */

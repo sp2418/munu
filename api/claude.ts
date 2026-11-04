@@ -53,36 +53,6 @@ function formatAudioFeaturesHuman(af: Record<string, unknown>): string | null {
     return parts.join("; ")
 }
 
-function formatBaselineFavTrack(row: unknown): string {
-    if (!Array.isArray(row) || row.length < 2) return ""
-    const title = String(row[0])
-    const artists = Array.isArray(row[1]) ? (row[1] as string[]).join(", ") : ""
-    let line = `${title} by ${artists}`
-    if (row.length >= 4 && row[3] != null && typeof row[3] === "object") {
-        const bag = row[3] as { audioFeatures?: unknown }
-        const af = bag.audioFeatures
-        if (af != null && typeof af === "object") {
-            const human = formatAudioFeaturesHuman(af as Record<string, unknown>)
-            if (human) line += ` — ${human}`
-        }
-    }
-    return line
-}
-
-function formatFavoriteArtists(names: unknown): string {
-    if (!Array.isArray(names)) return ""
-    return names
-        .map((a) => {
-            if (typeof a === "string") return a
-            if (a && typeof a === "object" && "name" in a) {
-                return String((a as { name: string }).name ?? "")
-            }
-            return ""
-        })
-        .filter(Boolean)
-        .join(", ")
-}
-
 function formatCurrTrackLine(t: CurrTrack): string {
     let base: string
     let af: unknown
@@ -104,18 +74,29 @@ function formatCurrTrackLine(t: CurrTrack): string {
 
 interface handleClaude {
     baseline: {
-        favGenres: string[],
-        favArtists: unknown[],
-        favTracks: unknown[],
-        personalContexts: string[],
-        addContext: string
+        favGenres: string[]
     };
-    
+
     currEmotContext: {
-        currRant: string,
-        currTracks: CurrTrack[],
-        emotions: string[]
+        currRant: string
+        currTracks: CurrTrack[]
+        desiredFeeling: string
     };
+}
+
+const DESIRED_FEELING_PROMPT_LINES: Record<string, string> = {
+    calm: "Calm — settle down, quiet the noise",
+    comforted: "Comforted — feel less alone in it",
+    "ready-to-rest": "Ready to rest — wind down toward sleep",
+    reflective: "Reflective — sit with it and think",
+    lighthearted: "Lighthearted — stop taking it so seriously",
+    happy: "Happy — lift the mood",
+    energized: "Energized — wake up, get moving",
+    confident: "Confident — feel bolder",
+}
+
+function formatDesiredFeeling(id: string): string {
+    return DESIRED_FEELING_PROMPT_LINES[id] ?? id
 }
 
 function delay(ms: number): Promise<void> {
@@ -179,34 +160,35 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         return res.status(500).json({ error: 'Missing Anthropic API key' })
     }
 
+    const recentTracksFormatted = currEmotContext.currTracks
+        .map((t) => formatCurrTrackLine(t))
+        .filter(Boolean)
+        .join("; ")
+
+    const desiredFeelingLine = formatDesiredFeeling(currEmotContext.desiredFeeling)
+
     const prompt = `
 
         You are a music therapist and emotional wellness guide.
 
-        You are experienced with applying the iso-principle. You meet people where they are emotionally based on the current music they're listening to. Then, you gradually help them shift toward an emotional state that would genuinely serve them given what they're processing — which might be calm acceptance, quiet groundedness, hopeful momentum, or empowered energy depending on what they need.
+        You are experienced with applying the iso-principle. You meet people where they are emotionally based on the current music they're listening to. Then, you gradually help them shift toward the emotional state they asked for.
+
+        Primary success criterion (strict): by the end of the playlist, a careful listener should clearly feel the user's chosen destination — "${desiredFeelingLine}" — expressed inside their own genre taste. Genre fit matters, but it must never override arriving at that feeling. Different users with different tastes should land in different-sounding music; the shared requirement is that song 10 embodies THEIR version of this feeling, not a generic template.
+
 
         Here is some information about the user's music taste:
 
         Favorite Genres: ${baseline.favGenres.join(", ")}
-
-        Favorite Artists: ${formatFavoriteArtists(baseline.favArtists)}
-
-        Favorite Tracks (each followed by audio features after an em dash where available):
-        ${baseline.favTracks.map((row) => formatBaselineFavTrack(row)).filter(Boolean).join("; ")}
-
-        Life Contexts when they listen to music: ${baseline.personalContexts.join(", ")}
-
-        What they think about their relationship with music: ${baseline.addContext}
 
 
         Here is information about how the user is actually currently feeling:
 
         What they are feeling recently: ${currEmotContext.currRant}
 
-        Their current emotions: ${currEmotContext.emotions.join(", ")}
-
         Songs they're listening to recently (each followed by audio features after an em dash where available):
-        ${currEmotContext.currTracks.map((t) => formatCurrTrackLine(t)).filter(Boolean).join("; ")}
+        ${recentTracksFormatted || "(none provided)"}
+
+        How they want to feel by the end: ${desiredFeelingLine}
 
 
         How to use the audio features:
@@ -218,50 +200,55 @@ export default async function handleClaude(req: VercelRequest, res: VercelRespon
         - tempo: beats per minute.
         - acousticness (0.0-1.0): confidence the track is acoustic.
 
-        Use these features as your primary signal for the energy arc — they tell you what the user's tracks actually sound like, not just what genre they belong to.
+        Use these features as your primary signal for the emotional arc — they tell you what the user's tracks actually sound like, not just what genre they belong to. Infer the START zone from their recent listening (or from what they wrote). Infer the END zone as how "${desiredFeelingLine}" would sound within their favorite genres — relative to their start, not as universal numeric targets. For example, "calm" within high-energy taste still means a clear settle from their start; "energized" within mellow taste still means a clear lift. Do not force every playlist toward the same absolute numbers.
 
-        Look at the full distribution of audio features across the user's favorite tracks and recent tracks. Their taste likely spans multiple emotional zones. Identify:
-        - The zone (range of valence and energy) that matches their current emotional state — songs they're reaching for right now.
-        - The zone that would represent the emotional state that would serve them at the end of the journey, given what they're processing.
 
-        Recommend songs whose audio characteristics trace a gradient between those two zones.
+        ISO trajectory (strict):
+
+        START: the ReccoBeats audio-feature zone of the user's recent-listening songs (when provided). If no recent tracks were provided, infer a starting zone from what they wrote, still staying inside their genre taste.
+        END: a sonic place that unmistakably embodies their selected desired state ("${desiredFeelingLine}") while remaining authentic to their genre taste.
+
+        The first tracks should sit close to the starting features. Each subsequent track must shift incrementally toward the target. No abrupt jumps in valence, energy, or related features from one song to the next.
+
+        If the gap between the starting features and the desired state is large, spend more of the 10 tracks on the matching / near-start phase before beginning the shift, so the gradient stays gradual.
 
 
         Specific Task Instructions:
 
-        1. Suggest how the current music they're listening to may be affecting their emotional state. Reference the audio characteristics of their current tracks (e.g., low valence and low energy can deepen reflective or somber feelings). Be warm and supportive. Use phrases like "may be affecting" instead of "is causing".
+        1. Suggest how the current music they're listening to may be affecting their emotional state. When recent tracks with audio features are available, reference those characteristics (e.g., low valence and low energy can deepen reflective or somber feelings). If no recent tracks were provided, ground this in what they wrote and their genre taste. Be warm and supportive. Use phrases like "may be affecting" instead of "is causing".
 
-        2. Briefly explain the iso-principle and how you're applying it for this user. Specifically name where they are emotionally and where the journey is moving toward, and why that destination makes sense given what they're processing. Keep it warm, accessible, and short.
+        2. Briefly explain the iso-principle and how you're applying it for this user. Specifically name where they are emotionally (the start) and that the journey is moving toward their chosen desired state (${desiredFeelingLine}), and why that destination makes sense given what they're processing. Keep it warm, accessible, and short.
 
-        3. Suggest 20 songs that represent the user's complete emotional journey using the iso-principle.
+        3. Suggest exactly 10 songs that represent the user's complete emotional journey using the iso-principle, following the ISO trajectory rules above.
 
 
 
-        First, decide what emotional destination would serve this user given what they shared. Some examples:
-        - Someone overwhelmed and stressed might benefit from arriving at calm groundedness (low energy, moderate valence).
-        - Someone processing grief might benefit from arriving at quiet strength or acceptance (moderate energy, moderate valence).
-        - Someone feeling stuck or numb might benefit from arriving at re-energized momentum (higher energy, higher valence).
-        - Someone needing to release frustration might benefit from arriving at cathartic empowerment (high energy, varied valence).
-        The destination should feel like genuine emotional movement, not forced positivity.
+        Structure the 10 songs as a continuous gradient from start to the selected desired state:
+        - Songs 1-3: Match the starting audio-feature zone (recent listening when available). Still name, in each explanation, that this is meeting them where they are before the shift toward "${desiredFeelingLine}".
+        - Songs 4-7: Small incremental steps toward the destination. Each step should be perceptible but gentle. Each explanation must say what moved closer to "${desiredFeelingLine}" versus the previous song.
+        - Songs 8-10: Landing phase. Each song must sit more clearly in the destination feeling than the one before it. Song 10 must be the strongest, clearest embodiment of "${desiredFeelingLine}" in the whole playlist — the peak arrival, not a soft epilogue that drifts away. Authentic to the user's genre taste.
 
-        Then structure the 20 songs as a gradient:
-        - Songs 1-4: Match the user's current emotional state. The audio features of these songs should be similar to what they're listening to right now.
-        - Songs 5-12: Gradually shift the audio features toward the destination zone. Each song should feel like a small step.
-        - Songs 13-16: Closer to the destination. The shift should be clearly perceptible.
-        - Songs 17-20: At the destination. Authentic to the user's taste, but at the audio-feature zone that represents emotional arrival.
+        Landing rules for songs 8-10 (strict):
+        - Do not pick a late-playlist song that pulls valence, energy, tempo, or overall vibe away from "${desiredFeelingLine}" relative to the previous track.
+        - Do not end on a track that feels like a restart, a hype rebound, or a return to the starting mood.
+        - If two candidates fit the genres equally well, choose the one that more unambiguously delivers "${desiredFeelingLine}".
 
-        The energy arc must trace a clear gradient in audio-feature space. Do not let the playlist stagnate in one zone — even if the destination is also low-energy, the texture should evolve.
+        When the start-to-end gap is large, lengthen the early matching phase and compress the later steps so the whole arc still fits in 10 songs without jumps.
+
+        Mid-playlist (songs 4-7) may evolve texture while moving toward the destination. The final three songs should commit to arriving — deepen into "${desiredFeelingLine}", do not wander for variety's sake.
 
 
         Important guidelines that apply to all song suggestions:
 
-        The song suggestions must feel stylistically consistent with the user's favorite artists and tracks. Stay within the genre territory shown in their taste profile.
+        The song suggestions must feel stylistically consistent with the user's favorite genres. Stay within that genre territory.
 
-        Do not include any songs that already appear in the user's favorite tracks or recent tracks lists. The playlist should be entirely new recommendations — songs they haven't told you they're already listening to. This is a strict requirement.
+        Do not include any songs that already appear in the user's recent tracks list. The playlist should be entirely new recommendations — songs they haven't told you they're already listening to. This is a strict requirement.
 
-        Prioritize artists from or similar to their favorite artists list. Mix recognizable songs with lesser-known tracks from artists in their taste profile, but only suggest songs you are confident exist. Accuracy over obscurity.
+        Mix recognizable songs with lesser-known tracks within their genre taste, but only suggest songs you are confident exist. Accuracy over obscurity.
 
         Do not introduce genres or styles disconnected from the user's taste, even at the destination. The destination is a different emotional zone within their taste, not a different musical world.
+
+        Every journeySongs explanation must explicitly connect that song to progress toward (or arrival at) "${desiredFeelingLine}". Do not write generic vibe notes that could apply to any destination.
 
 
         Return a JSON with these specific fields:

@@ -21,6 +21,33 @@
     box-shadow 0.18s;
 }
 
+.munu-chip--with-subtitle {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  white-space: normal;
+  overflow: visible;
+  max-width: 100%;
+  padding-block: 11px;
+  line-height: 1.25;
+}
+
+.munu-chip__label {
+  display: block;
+}
+
+.munu-chip__subtitle {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.3;
+  opacity: 0.72;
+}
+
+.munu-chip[aria-pressed="true"] .munu-chip__subtitle {
+  opacity: 0.85;
+}
+
 .munu-chip:hover {
   border-color: var(--tint);
   color: var(--accent-text);
@@ -151,5 +178,35 @@
   [data-slot="button"].munu-btn-primary:hover {
     transform: none;
     filter: none;
+  }
+}
+
+/*
+ * Back / Continue — fixed to the viewport, just above the floor SoundWave.
+ * Same anchor on story, intro, and question steps.
+ */
+.munu-floor-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--munu-floor-cta-bottom, 2.5rem);
+  z-index: 5;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding-inline: 48px;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.munu-floor-cta > * {
+  pointer-events: auto;
+}
+
+@media (max-width: 640px) {
+  .munu-floor-cta {
+    padding-inline: 24px;
   }
 }

@@ -28,7 +28,7 @@ export default function LoadingScreen({
 }: LoadingScreenProps) {
   return (
     <div
-      className={cn("arr-screen", className)}
+      className={cn("arr-screen arr-screen--load", className)}
       style={{ "--accent": accent } as CSSProperties}
     >
       <div className={cn("arr-screen__content arr-load__content", contentClassName)}>

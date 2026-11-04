@@ -1,15 +1,11 @@
 import { useState, useEffect, useLayoutEffect, useId, useRef, useMemo, useCallback, type CSSProperties } from "react"
 
-import {
-  type CarouselApi,
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-} from "../components/ui/carousel"
 import LoadingScreen from "../components/LoadingScreen"
-import InsightScreen from "../components/InsightScreen"
 import PlaylistScreen from "../components/PlaylistScreen"
+import PlaylistSyncedLayout from "../components/PlaylistSyncedLayout"
+import type { SyncedPlaylistTrack } from "../components/playlistPlayerTypes"
 import ScreenTransitionHost from "../components/ScreenTransitionHost"
+import FlowBrandHeader from "../components/FlowBrandHeader"
 import { Button } from "../components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog"
 import { cn } from "../lib/utils"
@@ -28,6 +24,7 @@ import {
   readClaudeCache,
   readJourneyRowsCache,
   shouldUseViviBakedResults,
+  writeViviBakedResultsCache,
   type ClaudeResponseCachePayload,
 } from "../lib/resultsCache"
 import {
@@ -39,6 +36,7 @@ import {
   isShowingViviWalkthroughOnResults,
   isViviWalkthroughActive,
 } from "../lib/viviWalkthroughStorage"
+import { saveYoutubePlaylistToHistory } from "../lib/youtubePlaylistStorage"
 
 const INSIGHT_LOADING_LINES = [
   "Listening to where you are...",
@@ -70,8 +68,27 @@ const MIRROR_STAGGER_STEP_MS = 520
 /** Matches insight `<p>` fade (`motion-safe:duration-[1400ms]`); journey lines appear after this. */
 const INSIGHT_BODY_FADE_MS = 1400
 
-/** Pause after journey work ends before showing the playlist CTA button. */
+/** Beat after the playlist starts fading before the footer CTA appears. */
+const PLAYLIST_FOOTER_AFTER_REVEAL_MS = 1600
+
+/** Pause after journey + YouTube settle before showing the “Ready for playlist” CTA. */
 const PLAYLIST_AFTER_LOADER_MS = 380
+
+/**
+ * Dev: skip YouTube resolve and show the carousel fallback UI.
+ * Also enabled with `?forceYoutubeFail=1` in the URL. Set back to false when done testing.
+ */
+const FORCE_YOUTUBE_PLAYLIST_FAIL = false
+
+function shouldForceYoutubePlaylistFail(): boolean {
+  if (FORCE_YOUTUBE_PLAYLIST_FAIL) return true
+  if (typeof window === "undefined") return false
+  try {
+    return new URLSearchParams(window.location.search).get("forceYoutubeFail") === "1"
+  } catch {
+    return false
+  }
+}
 
 /** ViVi walkthrough: minimum fullscreen insight loader before revealing baked copy. */
 const WALKTHROUGH_INSIGHT_LOADER_MS =
@@ -97,17 +114,10 @@ function shouldPlayWalkthroughResultsDemo(snapshot: ResultsMountSnapshot): boole
 /** Slower than native `scroll-behavior: smooth`; playlist fades in after this finishes. */
 const PLAYLIST_SCROLL_DURATION_MS = 2200
 
-/** Playlist wave: floor horizon → settled behind carousel (720 viewBox cy). */
-const PLAYLIST_WAVE_FLOOR_CY = 648
-const PLAYLIST_WAVE_CAROUSEL_CY = 300
-
 /** Matches `scroll-mt-8` on the playlist `<section>`. */
 const PLAYLIST_SCROLL_MARGIN_PX = 32
 
-/** After playlist carousel finishes revealing, wait then scroll so the check-in CTA is in view. */
-const PLAYLIST_READY_CTA_SCROLL_AFTER_MS = 2500
-
-/** Second scroll: slightly shorter than initial playlist scroll. */
+/** Scroll duration when bringing the footer CTA into view. */
 const PLAYLIST_READY_CTA_SCROLL_DURATION_MS = 1800
 
 type JourneyOnlyRowsPayload = {
@@ -120,8 +130,8 @@ function writeJourneyRowsCache(fingerprint: string, songs: any[]): void {
   try {
     const payload: JourneyOnlyRowsPayload = { fingerprint, songs }
     localStorage.setItem(RESULTS_JOURNEY_CACHE_KEY, JSON.stringify(payload))
-  } catch (e) {
-    console.warn("Could not persist journey rows cache:", e)
+  } catch {
+    /* ignore quota / private mode */
   }
 }
 
@@ -159,8 +169,8 @@ function writeClaudeCache(
       ...(journeyOut && journeyOut.length > 0 ? { journeySongsResolved: journeyOut } : {}),
     }
     localStorage.setItem(CLAUDE_RESPONSE_CACHE_KEY, JSON.stringify(payload))
-  } catch (e) {
-    console.warn("Could not persist Claude response cache:", e)
+  } catch {
+    /* ignore quota / private mode */
   }
 }
 
@@ -177,8 +187,8 @@ function writeResultsCacheWithCurrentStorage(parsed: unknown, journeySongsResolv
       writeJourneyRowsCache(fp, journeySongsResolved)
     }
     writeClaudeCache(fp, parsed, { journeySongsResolved })
-  } catch (e) {
-    console.warn("writeResultsCacheWithCurrentStorage failed:", e)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -213,6 +223,23 @@ function tryHydrateResultsSnapshotSync(): ResultsMountSnapshot {
     const baseline = JSON.parse(rawB) as MusicBaseline
     const currEmotContext = JSON.parse(rawC) as CurrEmotContext
     const fp = fingerprintForResultsInputs(baseline, currEmotContext)
+
+    // ViVi walkthrough always uses the in-repo bake so rebakes aren't shadowed by stale LS.
+    if (shouldUseViviBakedResults(baseline, currEmotContext)) {
+      const bakedJourney = viviBakedResults.journeySongsResolved
+      try {
+        writeViviBakedResultsCache(baseline, currEmotContext)
+      } catch {
+        /* ignore seed failures */
+      }
+      return {
+        claude: viviBakedResults.parsed,
+        journeySongs: bakedJourney,
+        journeySongsLoading: bakedJourney.length === 0,
+        resumeFullSnapshot: bakedJourney.length > 0,
+      }
+    }
+
     const raw = localStorage.getItem(CLAUDE_RESPONSE_CACHE_KEY)
     if (raw) {
       const data = JSON.parse(raw) as ClaudeResponseCachePayload
@@ -236,15 +263,6 @@ function tryHydrateResultsSnapshotSync(): ResultsMountSnapshot {
           journeySongsLoading: !hasJourney,
           resumeFullSnapshot: hasJourney,
         }
-      }
-    }
-    if (shouldUseViviBakedResults(baseline, currEmotContext)) {
-      const bakedJourney = viviBakedResults.journeySongsResolved
-      return {
-        claude: viviBakedResults.parsed,
-        journeySongs: bakedJourney,
-        journeySongsLoading: bakedJourney.length === 0,
-        resumeFullSnapshot: bakedJourney.length > 0,
       }
     }
     return {
@@ -378,55 +396,29 @@ function mirrorRevealClass(revealed: boolean) {
 
 function playlistRevealClass(revealed: boolean) {
   return cn(
-    "transition-opacity ease-out motion-reduce:transition-none",
-    revealed ? "opacity-100 motion-safe:duration-[900ms]" : "opacity-0 motion-safe:duration-0",
+    "transition-opacity ease-in-out motion-reduce:transition-none",
+    revealed ? "opacity-100 motion-safe:duration-[2200ms]" : "opacity-0 motion-safe:duration-0",
   )
-}
-
-/** Pause before album art fades in after carousel advance. */
-const JOURNEY_SLIDE_FADE_DELAY_MS = 420
-/** Extra beat after the cover starts fading before the caption fades in. */
-const JOURNEY_CAPTION_AFTER_CARD_MS = 420
-/** Opacity transition length for each song card / caption fade-in. */
-const JOURNEY_SLIDE_FADE_DURATION_MS = 900
-/** Opacity transition length for fade-out when leaving a slide. */
-const JOURNEY_SLIDE_FADE_OUT_MS = Math.min(220, JOURNEY_SLIDE_FADE_DURATION_MS)
-
-function journeySlideFadeClass(visible: boolean) {
-  return cn(
-    "transition-opacity ease-out motion-reduce:transition-none motion-reduce:opacity-100",
-    visible ? "opacity-100" : "opacity-0",
-  )
-}
-
-function journeySlideFadeStyle(visible: boolean): CSSProperties {
-  return {
-    transitionDuration: visible
-      ? `${JOURNEY_SLIDE_FADE_DURATION_MS}ms`
-      : `${JOURNEY_SLIDE_FADE_OUT_MS}ms`,
-  }
 }
 
 function formatJourneySongsForClipboard(songs: any[]): string {
   return songs
-    .map((song, i) => {
+    .map((song) => {
       const title =
         typeof song?.title === "string" && song.title.trim() ? song.title.trim() : "Unknown track"
       const artist =
         typeof song?.artist === "string" && song.artist.trim() ? song.artist.trim() : "Unknown artist"
-      return `${i + 1}. ${title} — ${artist}`
+      return `${artist} – ${title}`
     })
     .join("\n")
 }
 
 interface ResultsProps {
-  onRebuildMusicProfile: () => void
   onStartCheckInFresh: () => void
   onExitFollowAlongToWelcome: () => void
 }
 
 function Results({
-  onRebuildMusicProfile,
   onStartCheckInFresh,
   onExitFollowAlongToWelcome,
 }: ResultsProps) {
@@ -499,17 +491,33 @@ function Results({
   const [journeySongsLoading, setJourneySongsLoading] = useState(() =>
     playWalkthroughDemo ? true : mountSnapshot.journeySongsLoading,
   )
+  const [youtubePlaylistUrl, setYoutubePlaylistUrl] = useState<string | null>(null)
+  const [youtubeVideoIds, setYoutubeVideoIds] = useState<string[]>([])
+  /** Parallel to journeySongs — null when that row has no YouTube match. */
+  const [youtubeVideoIdByIndex, setYoutubeVideoIdByIndex] = useState<(string | null)[]>([])
+  const [youtubePlaylistLoading, setYoutubePlaylistLoading] = useState(false)
+  /** `journeySongKeys` value for which YouTube search has finished (null = not settled yet). */
+  const [youtubeSettledKeys, setYoutubeSettledKeys] = useState<string | null>(() =>
+    !playWalkthroughDemo && mountSnapshot.resumeFullSnapshot
+      ? mountSnapshot.journeySongs
+          .map((song: { title?: string; artist?: string }) => `${song.title ?? ""}\0${song.artist ?? ""}`)
+          .join("\n")
+      : null,
+  )
+  const journeySongKeys = useMemo(
+    () =>
+      journeySongs
+        .map((song: { title?: string; artist?: string }) => `${song.title ?? ""}\0${song.artist ?? ""}`)
+        .join("\n"),
+    [journeySongs],
+  )
+  const youtubeSettled = youtubeSettledKeys === journeySongKeys
 
   const [playlistWhyExpanded, setPlaylistWhyExpanded] = useState(false)
   const playlistWhyTriggerId = useId()
   const playlistWhyPanelId = useId()
 
-  const [journeyCarouselApi, setJourneyCarouselApi] = useState<CarouselApi | null>(null)
-  const [journeySnapIndex, setJourneySnapIndex] = useState(0)
-  const [displayedSnapIndex, setDisplayedSnapIndex] = useState(0)
-  const [journeyCardVisible, setJourneyCardVisible] = useState(true)
-  const [journeyCaptionVisible, setJourneyCaptionVisible] = useState(true)
-  const prevJourneySnapRef = useRef(0)
+  const [activePlaylistIndex, setActivePlaylistIndex] = useState(0)
   const [playlistListCopied, setPlaylistListCopied] = useState(false)
   const [playlistCopyFailed, setPlaylistCopyFailed] = useState(false)
   const playlistCopyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -520,10 +528,7 @@ function Results({
   )
 
   useEffect(() => {
-    prevJourneySnapRef.current = 0
-    setDisplayedSnapIndex(0)
-    setJourneyCardVisible(true)
-    setJourneyCaptionVisible(true)
+    setActivePlaylistIndex(0)
     setPlaylistListCopied(false)
     setPlaylistCopyFailed(false)
     if (playlistCopyResetTimerRef.current) {
@@ -558,7 +563,7 @@ function Results({
       setPlaylistListCopied(false)
       setPlaylistCopyFailed(false)
       playlistCopyResetTimerRef.current = null
-    }, 2500)
+    }, 2000)
   }, [playlistClipboardText])
 
   const playlistSectionRef = useRef<HTMLElement>(null)
@@ -596,6 +601,11 @@ function Results({
     return mountSnapshot.resumeFullSnapshot && (saved?.playlistRevealAllowed ?? true)
   })
   const [revealPlaylistCarousel, setRevealPlaylistCarousel] = useState(() => {
+    if (playWalkthroughDemo) return false
+    const saved = readResultsScreenProgress()
+    return mountSnapshot.resumeFullSnapshot && (saved?.playlistRevealAllowed ?? true)
+  })
+  const [revealPlaylistFooter, setRevealPlaylistFooter] = useState(() => {
     if (playWalkthroughDemo) return false
     const saved = readResultsScreenProgress()
     return mountSnapshot.resumeFullSnapshot && (saved?.playlistRevealAllowed ?? true)
@@ -699,11 +709,12 @@ function Results({
     setRevealPlaylistHeading(false)
     setRevealPlaylistWhy(false)
     setRevealPlaylistCarousel(false)
+    setRevealPlaylistFooter(false)
   }
 
   useLayoutEffect(() => {
     if (!resumeFullSnapshotRef.current || !claudeRes) return
-    playlistRevealHandledRef.current = true
+    // Resume restores reveal flags from initial state — don't block the reveal effect.
     clearPlaylistStaggerTimers()
   }, [claudeRes])
 
@@ -748,13 +759,17 @@ function Results({
     }
   }, [claudeRes])
 
-  /** After insight fade completes, allow journey rotating lines (still requires `journeySongsLoading`). */
+  /**
+   * Bottom status on the insight screen: start once the title begins fading in.
+   * Keep rotating lines visible until journey songs and YouTube resolution are both done.
+   */
   useEffect(() => {
-    if (!claudeRes || !journeySongsLoading) {
+    const stillBuilding = journeySongsLoading || !youtubeSettled
+    if (!claudeRes || !stillBuilding) {
       setJourneyLinesAllowed(false)
       return
     }
-    if (!revealMirrorInsight) {
+    if (!revealMirrorTitle) {
       setJourneyLinesAllowed(false)
       return
     }
@@ -769,15 +784,15 @@ function Results({
 
     const id = window.setTimeout(() => {
       setJourneyLinesAllowed(true)
-    }, INSIGHT_BODY_FADE_MS)
+    }, 180)
 
     return () => window.clearTimeout(id)
-  }, [claudeRes, journeySongsLoading, revealMirrorInsight])
+  }, [claudeRes, journeySongsLoading, youtubeSettled, revealMirrorTitle])
 
   /** After journey lines are allowed, fade the container in slowly (not an instant pop-in). */
   useLayoutEffect(() => {
-    if (!journeySongsLoading || !journeyLinesAllowed) {
-      setJourneyLinesEntered(false)
+    const stillBuilding = journeySongsLoading || !youtubeSettled
+    if (!stillBuilding || !journeyLinesAllowed) {
       return
     }
 
@@ -802,9 +817,9 @@ function Results({
       cancelAnimationFrame(outerRaf)
       cancelAnimationFrame(innerRaf)
     }
-  }, [journeySongsLoading, journeyLinesAllowed])
+  }, [journeySongsLoading, youtubeSettled, journeyLinesAllowed])
 
-  /** Journey work finished → brief beat → show “Show me my playlist” (user taps to scroll + reveal). */
+  /** Journey + YouTube settled → brief beat → show “Ready for playlist” (user taps to scroll + reveal). */
   useEffect(() => {
     if (!claudeRes) {
       setPlaylistRevealButtonReady(false)
@@ -815,22 +830,33 @@ function Results({
       setPlaylistRevealButtonReady(true)
       return
     }
-    if (journeySongsLoading) {
+    if (journeySongsLoading || !youtubeSettled) {
       setPlaylistRevealButtonReady(false)
       return
     }
+    if (playlistRevealAllowed) return
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const delay = reduced ? 0 : PLAYLIST_AFTER_LOADER_MS
 
     const id = window.setTimeout(() => {
       setPlaylistRevealButtonReady(true)
-    }, PLAYLIST_AFTER_LOADER_MS)
+    }, delay)
 
     return () => window.clearTimeout(id)
-  }, [claudeRes, journeySongsLoading])
+  }, [claudeRes, journeySongsLoading, youtubeSettled, playlistRevealAllowed])
 
-  /** Gentle fade-in for the playlist CTA (same pacing idea as journey lines). */
+  /** Gentle fade-in for the playlist CTA. */
   useLayoutEffect(() => {
     if (resumeFullSnapshotRef.current) return
-    if (!claudeRes || journeySongsLoading || !playlistRevealButtonReady || playlistRevealAllowed) {
+    if (
+      !claudeRes ||
+      journeySongsLoading ||
+      !youtubeSettled ||
+      !playlistRevealButtonReady ||
+      playlistRevealAllowed
+    ) {
       setPlaylistCtaEntered(false)
       return
     }
@@ -856,7 +882,13 @@ function Results({
       cancelAnimationFrame(outerRaf)
       cancelAnimationFrame(innerRaf)
     }
-  }, [claudeRes, journeySongsLoading, playlistRevealButtonReady, playlistRevealAllowed])
+  }, [
+    claudeRes,
+    journeySongsLoading,
+    youtubeSettled,
+    playlistRevealButtonReady,
+    playlistRevealAllowed,
+  ])
 
   useEffect(() => {
     if (!claudeRes) {
@@ -876,10 +908,10 @@ function Results({
     }
 
     if (playlistRevealHandledRef.current) return
-    playlistRevealHandledRef.current = true
 
     const el = playlistSectionRef.current
     if (!el) return
+    playlistRevealHandledRef.current = true
 
     const reduced =
       typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -942,12 +974,39 @@ function Results({
     }
   }, [claudeRes, playlistRevealAllowed])
 
-  /** Once the carousel is visible, pause then scroll so the italic line and “I’m Ready” land in view. */
+  /** Footer CTA waits until the playlist fade has a head start, then eases in more slowly. */
+  useEffect(() => {
+    if (!playlistRevealAllowed || !revealPlaylistCarousel) {
+      setRevealPlaylistFooter(false)
+      return
+    }
+    if (resumeFullSnapshotRef.current) {
+      setRevealPlaylistFooter(true)
+      return
+    }
+
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+    if (reduced) {
+      setRevealPlaylistFooter(true)
+      return
+    }
+
+    const id = window.setTimeout(() => {
+      setRevealPlaylistFooter(true)
+    }, PLAYLIST_FOOTER_AFTER_REVEAL_MS)
+
+    return () => window.clearTimeout(id)
+  }, [playlistRevealAllowed, revealPlaylistCarousel])
+
+  /** Once the footer CTA appears, scroll so the button is in view. */
   useEffect(() => {
     if (resumeFullSnapshotRef.current) return
-    if (!revealPlaylistCarousel || !playlistRevealAllowed || !claudeRes) return
+    if (!revealPlaylistFooter || !playlistRevealAllowed || !claudeRes) return
 
     const rafRef = { current: 0 }
+    // Wait a frame so the footer is laid out before measuring.
     const timeoutId = window.setTimeout(() => {
       const el = playlistReadyCtaRef.current
       if (!el) return
@@ -957,11 +1016,14 @@ function Results({
 
       const rect = el.getBoundingClientRect()
       const startY = window.scrollY
-      const targetY = Math.max(0, rect.top + startY - PLAYLIST_SCROLL_MARGIN_PX)
+      const targetY = Math.max(
+        0,
+        rect.bottom + startY - window.innerHeight + 24,
+      )
       const distance = targetY - startY
 
       if (reduced || Math.abs(distance) < 2) {
-        window.scrollTo({ top: targetY, behavior: "auto" })
+        if (Math.abs(distance) >= 2) window.scrollTo({ top: targetY, behavior: "auto" })
         return
       }
 
@@ -976,13 +1038,13 @@ function Results({
         }
       }
       rafRef.current = window.requestAnimationFrame(tick)
-    }, PLAYLIST_READY_CTA_SCROLL_AFTER_MS)
+    }, 80)
 
     return () => {
       window.clearTimeout(timeoutId)
       window.cancelAnimationFrame(rafRef.current)
     }
-  }, [revealPlaylistCarousel, playlistRevealAllowed, claudeRes])
+  }, [revealPlaylistFooter, playlistRevealAllowed, claudeRes])
 
   useEffect(() => {
     if (!profile) return
@@ -1021,7 +1083,6 @@ function Results({
       if (!cancelled) setClaudeInsightError(null)
       try {
         const url = `/api/claude?baseline=${encodeURIComponent(JSON.stringify(baseline))}&currEmotContext=${encodeURIComponent(JSON.stringify(currEmotContext))}`
-        console.log("fetch url", url)
         const response = await fetch(url)
         const data = (await response.json()) as { response?: string; error?: string }
 
@@ -1034,7 +1095,6 @@ function Results({
             response.status === 529
           if (retryable && attempt < maxAttempts - 1) {
             const wait = claudeBackoffMs(attempt)
-            console.warn(`Claude request ${response.status}; retrying in ${wait}ms (${attempt + 1}/${maxAttempts})`)
             await new Promise((r) => setTimeout(r, wait))
             if (cancelled) return
             return fetchClaudeResponse(attempt + 1, maxAttempts)
@@ -1047,22 +1107,18 @@ function Results({
         }
 
         const cleaned = data.response.replace(/```json|```/g, "").trim()
-        console.log("raw response", cleaned)
         const parsed = JSON.parse(cleaned)
         if (cancelled) return
-        console.log("claude response", parsed)
         setClaudeRes(parsed)
         setClaudeInsightError(null)
         if (fingerprint) writeClaudeCache(fingerprint, parsed)
-      } catch (error) {
+      } catch {
         if (attempt < maxAttempts - 1) {
           const wait = claudeBackoffMs(attempt)
-          console.warn(`Claude fetch failed; retrying in ${wait}ms (${attempt + 1}/${maxAttempts})`, error)
           await new Promise((r) => setTimeout(r, wait))
           if (cancelled) return
           return fetchClaudeResponse(attempt + 1, maxAttempts)
         }
-        console.error("Failed after multiple attempts:", error)
         if (cancelled) return
         const statusOverload =
           lastHttpStatus === 429 ||
@@ -1150,7 +1206,6 @@ function Results({
       const normalize = (str: string) =>
         str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
-      console.log("number of songs", songs.length)
       const token = await getSpotifyAccessToken()
       if (!token) return verifiedSongs
       for (const song of songs) {
@@ -1170,11 +1225,7 @@ function Results({
         const result = await response.json()
         const items = result.tracks?.items
 
-        console.log(`Verifying: ${title} by ${artist}`)
-        console.log("items returned:", items)
-
         if (!items || items.length === 0) {
-          console.log(`DROPPED at Spotify - no items returned for: ${title}`)
           continue
         }
 
@@ -1184,16 +1235,13 @@ function Results({
           normalize(a.name).includes(normalize(cleanArtist))
         )
 
-        console.log(`trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
-
         if (trackMatches && artistMatches) {
           const imageUrl = returnedTrack.album?.images?.[0]?.url ?? null
-          verifiedSongs.push({ ...song, imageUrl })
-        } else {
-          console.log(`DROPPED at matching - ${title} by ${artist}`)
-          console.log(
-            `Spotify returned: ${returnedTrack.name} by ${returnedTrack.artists.map((a: any) => a.name).join(", ")}`
-          )
+          const durationMs =
+            typeof returnedTrack.duration_ms === "number" && returnedTrack.duration_ms > 0
+              ? returnedTrack.duration_ms
+              : null
+          verifiedSongs.push({ ...song, imageUrl, durationMs })
         }
       }
       return verifiedSongs
@@ -1220,52 +1268,88 @@ function Results({
   }, [claudeRes, profile?.baseline, profile?.currEmotContext, playWalkthroughDemo])
 
   useEffect(() => {
-    if (!journeyCarouselApi) return
-    const sync = () => setJourneySnapIndex(journeyCarouselApi.selectedScrollSnap())
-    sync()
-    journeyCarouselApi.on("select", sync)
-    journeyCarouselApi.on("reInit", sync)
+    if (!journeySongKeys) {
+      setYoutubePlaylistUrl(null)
+      setYoutubeVideoIds([])
+      setYoutubeVideoIdByIndex([])
+      setYoutubePlaylistLoading(false)
+      setYoutubeSettledKeys("")
+      return
+    }
+
+    const songs = journeySongs.map((song: { title?: string; artist?: string }) => ({
+      title: song.title ?? "",
+      artist: song.artist ?? "",
+    }))
+    const keysForFetch = journeySongKeys
+
+    let cancelled = false
+    setYoutubePlaylistLoading(true)
+    setYoutubePlaylistUrl(null)
+    setYoutubeVideoIds([])
+    setYoutubeVideoIdByIndex(songs.map(() => null))
+
+    void (async () => {
+      try {
+        if (shouldForceYoutubePlaylistFail()) {
+          return
+        }
+
+        const res = await fetch("/api/youtube-search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ journeySongs: songs }),
+        })
+        if (cancelled) return
+        if (!res.ok) {
+          setYoutubePlaylistUrl(null)
+          setYoutubeVideoIds([])
+          setYoutubeVideoIdByIndex(songs.map(() => null))
+          return
+        }
+        const data = (await res.json()) as {
+          videoIds?: string[]
+          tracks?: { videoId?: string; title?: string; artist?: string }[]
+          playlistUrl?: string
+        }
+        const resolvedTracks = Array.isArray(data.tracks) ? data.tracks : []
+        const alignedIds = songs.map((song) => {
+          const match = resolvedTracks.find(
+            (t) =>
+              String(t?.title ?? "").trim() === song.title &&
+              String(t?.artist ?? "").trim() === song.artist,
+          )
+          const id = typeof match?.videoId === "string" ? match.videoId.trim() : ""
+          return id || null
+        })
+        const videoIds = alignedIds.filter((id): id is string => Boolean(id))
+        const playlistUrl = data.playlistUrl ?? null
+        if (!cancelled) {
+          setYoutubePlaylistUrl(playlistUrl)
+          setYoutubeVideoIds(videoIds)
+          setYoutubeVideoIdByIndex(alignedIds)
+          if (videoIds.length > 0 && playlistUrl) {
+            saveYoutubePlaylistToHistory({ videoIds, playlistUrl })
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setYoutubePlaylistUrl(null)
+          setYoutubeVideoIds([])
+          setYoutubeVideoIdByIndex(songs.map(() => null))
+        }
+      } finally {
+        if (!cancelled) {
+          setYoutubePlaylistLoading(false)
+          setYoutubeSettledKeys(keysForFetch)
+        }
+      }
+    })()
+
     return () => {
-      journeyCarouselApi.off("select", sync)
-      journeyCarouselApi.off("reInit", sync)
+      cancelled = true
     }
-  }, [journeyCarouselApi])
-
-  useLayoutEffect(() => {
-    if (prevJourneySnapRef.current === journeySnapIndex) return
-    prevJourneySnapRef.current = journeySnapIndex
-
-    const reduced =
-      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-    if (reduced) {
-      setDisplayedSnapIndex(journeySnapIndex)
-      setJourneyCardVisible(true)
-      setJourneyCaptionVisible(true)
-      return undefined
-    }
-
-    setJourneyCardVisible(false)
-    setJourneyCaptionVisible(false)
-
-    const swapTimer = window.setTimeout(() => {
-      setDisplayedSnapIndex(journeySnapIndex)
-    }, JOURNEY_SLIDE_FADE_OUT_MS)
-
-    const cardTimer = window.setTimeout(() => {
-      setJourneyCardVisible(true)
-    }, JOURNEY_SLIDE_FADE_OUT_MS + JOURNEY_SLIDE_FADE_DELAY_MS)
-
-    const captionTimer = window.setTimeout(() => {
-      setJourneyCaptionVisible(true)
-    }, JOURNEY_SLIDE_FADE_OUT_MS + JOURNEY_SLIDE_FADE_DELAY_MS + JOURNEY_CAPTION_AFTER_CARD_MS)
-
-    return () => {
-      window.clearTimeout(swapTimer)
-      window.clearTimeout(cardTimer)
-      window.clearTimeout(captionTimer)
-    }
-  }, [journeySnapIndex])
+  }, [journeySongKeys, journeySongs])
 
   const handleSongPreview = async (songs: any[]) => {
     const songsWithPreviews: any[] = []
@@ -1277,43 +1361,56 @@ function Results({
       const data = await response.json()
       const result = data.results[0]
 
-      console.log(`iTunes lookup: ${song.title} by ${song.artist}`)
-      console.log("iTunes result:", result)
-
       if (!result) {
-        console.log(`DROPPED at iTunes - no result for: ${song.title}`)
         songsWithPreviews.push({ ...song, previewUrl: null })
       }
       else{
         const normalize = (str: string) =>
           str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        
-        // const trackMatches = result.trackName.toLowerCase().includes(song.title.toLowerCase())
-        // const artistMatches = result.artistName.toLowerCase().includes(song.artist.toLowerCase())
+
         const trackMatches = normalize(result.trackName).includes(normalize(song.title))
         const artistMatches = normalize(result.artistName).includes(normalize(cleanArtist))
 
-        console.log(`iTunes trackMatches: ${trackMatches}, artistMatches: ${artistMatches}`)
-        console.log(`iTunes returned: ${result.trackName} by ${result.artistName}`)
-
         const matched = trackMatches && artistMatches
         const previewUrl = matched ? result.previewUrl : null
+        const itunesDuration =
+          matched && typeof result.trackTimeMillis === "number" && result.trackTimeMillis > 0
+            ? result.trackTimeMillis
+            : null
+        const durationMs =
+          typeof song.durationMs === "number" && song.durationMs > 0
+            ? song.durationMs
+            : itunesDuration
 
-        songsWithPreviews.push({ ...song, previewUrl })
+        songsWithPreviews.push({ ...song, previewUrl, durationMs })
       }
 
     }
     return songsWithPreviews
   }
 
+  const youtubePlaylistReady = youtubeVideoIds.length > 0 || !!youtubePlaylistUrl
+  const youtubePlaylistFailed =
+    !youtubePlaylistLoading && journeySongs.length > 0 && !youtubePlaylistReady
 
-  console.log("Baseline:", profile?.baseline)
-  console.log("Emotional Context", profile?.currEmotContext)
+  const syncedPlaylistTracks: SyncedPlaylistTrack[] = useMemo(
+    () =>
+      journeySongs.map((song: any, i: number) => ({
+        title: typeof song?.title === "string" ? song.title : "",
+        artist: typeof song?.artist === "string" ? song.artist : "",
+        videoId: youtubeVideoIdByIndex[i] ?? null,
+        previewUrl: song?.previewUrl ?? null,
+        imageUrl: song?.imageUrl ?? null,
+        durationMs:
+          typeof song?.durationMs === "number" && song.durationMs > 0 ? song.durationMs : null,
+        explanation: typeof song?.explanation === "string" ? song.explanation : null,
+      })),
+    [journeySongs, youtubeVideoIdByIndex],
+  )
 
-  const currentJourneySong = journeySongs[displayedSnapIndex] ?? journeySongs[0]
-
+  const stillBuildingPlaylist = journeySongsLoading || !youtubeSettled
   const insightFooter =
-    journeySongsLoading && journeyLinesAllowed ? (
+    stillBuildingPlaylist && journeyLinesAllowed ? (
       <div
         className={cn(
           "transition-opacity ease-out motion-reduce:transition-none",
@@ -1323,7 +1420,7 @@ function Results({
       >
         <RotatingLoadingLines
           lines={JOURNEY_LOADING_LINES}
-          active
+          active={stillBuildingPlaylist && journeyLinesAllowed}
           lineClassName="arr-status m-0"
         />
       </div>
@@ -1338,34 +1435,20 @@ function Results({
         )}
         onClick={() => setPlaylistRevealAllowed(true)}
       >
-        Show me my playlist
+        Ready for playlist
       </button>
     ) : null
 
-  const journeyCardFade = journeySlideFadeClass(journeyCardVisible)
-  const journeyCardFadeTiming = journeySlideFadeStyle(journeyCardVisible)
-  const journeyCaptionFade = journeySlideFadeClass(journeyCaptionVisible)
-  const journeyCaptionFadeTiming = journeySlideFadeStyle(journeyCaptionVisible)
-
-  const playlistGetCy = useCallback(() => {
-    const sec = playlistSectionRef.current
-    if (!sec) return PLAYLIST_WAVE_CAROUSEL_CY
-    const h = sec.offsetHeight || window.innerHeight
-    const start = sec.offsetTop - h
-    const prog = Math.max(0, Math.min(1, (window.scrollY - start) / h))
-    return PLAYLIST_WAVE_FLOOR_CY + (PLAYLIST_WAVE_CAROUSEL_CY - PLAYLIST_WAVE_FLOOR_CY) * prog
-  }, [])
-
+  /** One key after loading so insight → playlist morphs in place (no crossfade jump). */
   const resultsScreenKey = useMemo(() => {
     if (!claudeRes) return "loading"
-    if (!playlistRevealAllowed) return "insight"
-    return "playlist"
-  }, [claudeRes, playlistRevealAllowed])
+    return "results"
+  }, [claudeRes])
 
-  const resultsWave = useMemo(() => {
-    if (resultsScreenKey === "playlist") return null
-    return { mode: "floor" as const, color: "var(--fill)", swell: 0.4 }
-  }, [resultsScreenKey])
+  const resultsWave = useMemo(
+    () => ({ mode: "floor" as const, color: "var(--fill)", swell: 0.4 }),
+    [],
+  )
 
   let resultsContent
 
@@ -1417,210 +1500,200 @@ function Results({
           )}
         </LoadingScreen>
     )
-  } else if (!playlistRevealAllowed) {
-    resultsContent = (
-            <InsightScreen
-              accent="var(--fill)"
-              title="Where the music meets you now"
-              titleClassName={mirrorRevealClass(revealMirrorTitle)}
-              bodyClassName={mirrorRevealClass(revealMirrorInsight)}
-              footer={insightFooter}
-            >
-              {claudeRes.insight}
-            </InsightScreen>
-    )
   } else {
     resultsContent = (
-            <>
-              <div className="arr-insight__compact">
+            <div
+              className={cn(
+                "arr-insight-playlist",
+                playlistRevealAllowed && "arr-insight-playlist--revealed",
+                playlistRevealAllowed &&
+                  !resumeFullSnapshotRef.current &&
+                  "arr-insight-playlist--rise",
+                viviWalkthroughActive && "arr-insight-playlist--walkthrough",
+              )}
+              style={{ "--accent": "var(--fill)" } as CSSProperties}
+            >
+              <div className="arr-insight-playlist__mirror">
                 <div className="arr-insight__inner mx-auto">
-                  <h2 className="arr-insight__title">Where the music meets you now</h2>
-                  <p className="arr-insight__body">{claudeRes.insight}</p>
+                  <h2 className={cn("arr-insight__title", mirrorRevealClass(revealMirrorTitle))}>
+                    Where the music meets you now
+                  </h2>
+                  <p className={cn("arr-insight__body", mirrorRevealClass(revealMirrorInsight))}>
+                    {claudeRes.insight}
+                  </p>
                 </div>
+                {!playlistRevealAllowed && insightFooter ? (
+                  <div className="arr-insight-playlist__cta">{insightFooter}</div>
+                ) : null}
               </div>
               <section
                 ref={playlistSectionRef}
-                className="scroll-mt-8"
+                className="arr-insight-playlist__playlist scroll-mt-8"
                 aria-label="Your curated playlist"
+                aria-hidden={!playlistRevealAllowed}
               >
-                {journeySongs.length > 0 ? (
-                  <>
-                    <div className="sr-only" aria-hidden>
-                      <Carousel
-                        opts={{ align: "center", loop: false }}
-                        setApi={setJourneyCarouselApi}
-                      >
-                        <CarouselContent>
-                          {journeySongs.map((song: any, i: number) => (
-                            <CarouselItem key={`journey-hidden-${i}-${song.title}-${song.artist}`}>
-                              <span>{song.title}</span>
-                            </CarouselItem>
-                          ))}
-                        </CarouselContent>
-                      </Carousel>
-                    </div>
-                    <PlaylistScreen
-                      accent="var(--fill)"
-                      waveGetCy={playlistGetCy}
-                      title="Musical nutrients for the journey forward"
-                      titleClassName={playlistRevealClass(revealPlaylistHeading)}
-                      song={{
-                        name: currentJourneySong?.title,
-                        artist: currentJourneySong?.artist,
-                        note: currentJourneySong?.explanation,
-                        art: currentJourneySong?.imageUrl,
-                      }}
-                      index={journeySnapIndex}
-                      count={journeySongs.length}
-                      previewBar={
-                        currentJourneySong?.previewUrl ? (
-                          <audio
-                            controls
-                            src={currentJourneySong.previewUrl}
-                            preload="none"
-                          />
-                        ) : undefined
+                {playlistRevealAllowed && journeySongs.length > 0 ? (
+                  <PlaylistScreen
+                    accent="var(--fill)"
+                    title="Musical nutrients for the journey forward"
+                    titleClassName={playlistRevealClass(revealPlaylistHeading)}
+                    onWhy={() => setPlaylistWhyExpanded((o) => !o)}
+                    whyButtonId={playlistWhyTriggerId}
+                    whyPanelId={playlistWhyPanelId}
+                    whyExpanded={playlistWhyExpanded}
+                    whyClassName={playlistRevealClass(revealPlaylistWhy)}
+                    whyPanel={<p>{claudeRes.isoExplanation}</p>}
+                  >
+                    <PlaylistSyncedLayout
+                      className={playlistRevealClass(revealPlaylistCarousel)}
+                      tracks={syncedPlaylistTracks}
+                      activeIndex={activePlaylistIndex}
+                      onActiveIndexChange={setActivePlaylistIndex}
+                      mode={youtubePlaylistFailed || !youtubePlaylistReady ? "preview" : "youtube"}
+                      playerPlaceholder={
+                        youtubePlaylistLoading ? (
+                          <p className="arr-followup__hint">Building your YouTube playlist…</p>
+                        ) : null
                       }
-                      onPrev={() => journeyCarouselApi?.scrollPrev()}
-                      onNext={() => journeyCarouselApi?.scrollNext()}
-                      onWhy={() => setPlaylistWhyExpanded((o) => !o)}
-                      whyButtonId={playlistWhyTriggerId}
-                      whyPanelId={playlistWhyPanelId}
-                      whyExpanded={playlistWhyExpanded}
-                      whyClassName={playlistRevealClass(revealPlaylistWhy)}
-                      whyPanel={
-                        <div
-                          id={playlistWhyPanelId}
-                          role="region"
-                          aria-labelledby={playlistWhyTriggerId}
-                          className={cn(
-                            "grid w-full overflow-hidden motion-reduce:transition-none",
-                            "transition-[grid-template-rows] duration-500 ease-in-out motion-reduce:duration-0",
-                            playlistWhyExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
-                          )}
-                        >
-                          <div className="min-h-0 overflow-hidden">
-                            <div
-                              className={cn(
-                                "arr-player__why-panel motion-reduce:transition-none",
-                                "transition-opacity duration-500 ease-in-out motion-reduce:duration-0",
-                                playlistWhyExpanded
-                                  ? "opacity-100"
-                                  : "pointer-events-none opacity-0",
-                              )}
-                            >
-                              <p>{claudeRes.isoExplanation}</p>
-                            </div>
-                          </div>
-                        </div>
+                      leadingNotice={
+                        youtubePlaylistFailed ? (
+                          <p className="arr-youtube-fallback__notice">
+                            We&apos;ve hit today&apos;s limit for full playback, so we can&apos;t create a
+                            YouTube playlist right now.
+                            <br />
+                            Here&apos;s a 30-second preview of each song, plus the full list so you can
+                            build your own.
+                          </p>
+                        ) : null
+                      }
+                      headerAction={
+                        youtubePlaylistUrl ? (
+                          <a
+                            className="arr-playlist-sync__action"
+                            href={youtubePlaylistUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                            Open on YouTube
+                          </a>
+                        ) : null
                       }
                       onCopy={() => void handleCopyPlaylistList()}
                       copyLabel={
                         playlistListCopied
-                          ? "Copied!"
+                          ? "Copied"
                           : playlistCopyFailed
-                            ? "Copy failed — try again"
-                            : "Copy song list"
+                            ? "Copy failed"
+                            : "Copy list"
                       }
-                      copyStatus={
-                        <p className="arr-player__copy-status" aria-live="polite" role="status">
-                          {playlistListCopied
-                            ? "Song list copied to your clipboard."
-                            : playlistCopyFailed
-                              ? "Clipboard access was blocked. You can try again or copy manually."
-                              : "\u00a0"}
-                        </p>
-                      }
-                      stageClassName={playlistRevealClass(revealPlaylistCarousel)}
-                      cardClassName={revealPlaylistCarousel ? journeyCardFade : undefined}
-                      cardStyle={revealPlaylistCarousel ? journeyCardFadeTiming : undefined}
-                      captionClassName={revealPlaylistCarousel ? journeyCaptionFade : undefined}
-                      captionStyle={revealPlaylistCarousel ? journeyCaptionFadeTiming : undefined}
-                    >
-                      {revealPlaylistCarousel ? (
-                        viviWalkthroughActive ? (
-                          <div
-                            ref={playlistReadyCtaRef}
-                            className="arr-followup motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms]"
-                          >
-                            <p className="arr-followup__hint">
-                              Ready to try MuNu for yourself?
-                            </p>
-                            <button
-                              type="button"
-                              className="arr-cta"
-                              onClick={() => onExitFollowAlongToWelcome()}
-                            >
-                              Start your own journey
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div
-                              ref={playlistReadyCtaRef}
-                              className="arr-followup motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[900ms]"
-                            >
-                              <p className="arr-followup__hint">
-                                Ready for a new playlist? Start with another quick check-in.
-                              </p>
-                              <button
-                                type="button"
-                                className="arr-cta"
-                                onClick={() => setPlaylistReadyModalOpen(true)}
-                              >
-                                I&apos;m Ready
-                              </button>
-                            </div>
-                            <Dialog open={playlistReadyModalOpen} onOpenChange={setPlaylistReadyModalOpen}>
-                              <DialogContent className="arr-dialog flex min-h-[22rem] flex-col items-center justify-center gap-8 py-8 text-center sm:max-w-lg sm:min-h-[26rem]">
-                                <DialogHeader className="flex w-full max-w-full flex-col items-center gap-4 text-center">
-                                  <DialogTitle className="sr-only">Check-in options</DialogTitle>
-                                  <p className="arr-dialog__body sm:max-w-xs">
-                                    Your next playlist starts with how you&apos;re feeling now. Want to update your
-                                    music profile first, or jump straight into your check-in?
-                                  </p>
-                                </DialogHeader>
-                                <div className="arr-dialog__actions">
-                                  <button
-                                    type="button"
-                                    className="arr-back"
-                                    onClick={() => {
-                                      setPlaylistReadyModalOpen(false)
-                                      onRebuildMusicProfile()
-                                    }}
-                                  >
-                                    Update My Profile
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="arr-cta"
-                                    onClick={() => {
-                                      setPlaylistReadyModalOpen(false)
-                                      onStartCheckInFresh()
-                                    }}
-                                  >
-                                    Start Check-In
-                                  </button>
-                                </div>
-                              </DialogContent>
-                            </Dialog>
-                          </>
-                        )
-                      ) : null}
-                    </PlaylistScreen>
-                  </>
-                ) : (
+                    />
+                  </PlaylistScreen>
+                ) : playlistRevealAllowed ? (
                   <p className="arr-player__note px-6 py-10 text-center">No songs matched for this journey.</p>
-                )}
+                ) : null}
               </section>
-            </>
+              {revealPlaylistFooter ? (
+                viviWalkthroughActive ? (
+                  <div
+                    ref={playlistReadyCtaRef}
+                    className={cn(
+                      "arr-followup",
+                      "motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[2000ms] motion-safe:ease-in-out",
+                    )}
+                  >
+                    <p className="arr-followup__hint">
+                      Ready to try MuNu for yourself?
+                    </p>
+                    <button
+                      type="button"
+                      className="arr-cta"
+                      onClick={() => onExitFollowAlongToWelcome()}
+                    >
+                      Start your own journey
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div
+                      ref={playlistReadyCtaRef}
+                      className={cn(
+                        "arr-followup",
+                        "motion-safe:animate-in motion-safe:fade-in motion-safe:duration-[2000ms] motion-safe:ease-in-out",
+                      )}
+                    >
+                      <p className="arr-followup__hint">
+                        Ready for a new playlist? Start with another quick check-in.
+                      </p>
+                      <button
+                        type="button"
+                        className="arr-cta"
+                        onClick={() => {
+                          if (journeySongs.length > 0) {
+                            setPlaylistReadyModalOpen(true)
+                            return
+                          }
+                          onStartCheckInFresh()
+                        }}
+                      >
+                        I&apos;m Ready
+                      </button>
+                    </div>
+                    <Dialog open={playlistReadyModalOpen} onOpenChange={setPlaylistReadyModalOpen}>
+                      <DialogContent className="arr-dialog flex min-h-[22rem] flex-col items-center justify-center gap-8 py-8 text-center sm:max-w-lg sm:min-h-[26rem]">
+                        <DialogHeader className="flex w-full max-w-full flex-col items-center gap-4 text-center">
+                          <DialogTitle className="font-serif text-xl font-semibold text-[#39322a]">
+                            Start a new check-in?
+                          </DialogTitle>
+                          <p className="arr-dialog__body sm:max-w-xs">
+                            Your current playlist will be replaced and can&apos;t be recovered.
+                            {youtubePlaylistUrl
+                              ? " Open the YouTube link now if you want to keep it."
+                              : null}
+                          </p>
+                        </DialogHeader>
+                        <div className="arr-dialog__actions">
+                          <button
+                            type="button"
+                            className="arr-back"
+                            onClick={() => setPlaylistReadyModalOpen(false)}
+                          >
+                            Keep this playlist
+                          </button>
+                          <button
+                            type="button"
+                            className="arr-cta"
+                            onClick={() => {
+                              setPlaylistReadyModalOpen(false)
+                              onStartCheckInFresh()
+                            }}
+                          >
+                            Start new check-in
+                          </button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </>
+                )
+              ) : null}
+            </div>
     )
   }
 
+
   return (
-    <ScreenTransitionHost screenKey={resultsScreenKey} wave={resultsWave}>
-      {resultsContent}
-    </ScreenTransitionHost>
+    <div className="munu-flow-shell munu-flow-shell--branded">
+      <FlowBrandHeader />
+      <div className="munu-flow-shell__body">
+        <ScreenTransitionHost screenKey={resultsScreenKey} wave={resultsWave}>
+          {resultsContent}
+        </ScreenTransitionHost>
+      </div>
+    </div>
   )
 }
 

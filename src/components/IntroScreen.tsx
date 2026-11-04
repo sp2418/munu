@@ -54,7 +54,7 @@ export default function IntroScreen({
       </div>
 
       {onBack || onContinue ? (
-        <div className={cn("intro-screen__footer", footerClassName)}>
+        <div className={cn("intro-screen__footer munu-floor-cta", footerClassName)}>
           {onBack ? (
             <button type="button" className="intro-screen__back" onClick={onBack}>
               {backLabel}

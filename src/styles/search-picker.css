@@ -128,7 +128,7 @@
   scrollbar-gutter: stable;
 }
 
-/* Search-picker stage: let the picks column use most of the viewport */
+/* Search-picker stage: top-pinned so the dropdown + picks can use the viewport */
 .munu-question-stage--search-picker .munu-picks-column {
   min-height: calc(100svh - 14rem);
 }

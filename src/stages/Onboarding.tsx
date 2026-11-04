@@ -1,6 +1,7 @@
 import IntroScreen from "../components/IntroScreen"
 import StoryScreen from "../components/StoryScreen"
 import Welcome from "./Welcome"
+import FlowBrandHeader from "../components/FlowBrandHeader"
 import QuestionBlock from "../components/QuestionBlock"
 import QuestionStageLayout, {
     QUESTION_HINT_AUTO_HIDE_MS,
@@ -9,8 +10,6 @@ import QuestionStageLayout, {
 import { cn } from "../lib/utils"
 import { spotifyTrackSearchDedupKey } from "../lib/trackSearchDedupe"
 import { getSpotifyAccessToken } from "../lib/spotifyToken"
-
-import type { MusicBaseline } from "../lib/reccobeatsEnrich"
 
 import viviImage from "../assets/vivi.jpg"
 import { useFollowAlongPersona } from "../context/FollowAlongPersonaContext"
@@ -21,37 +20,77 @@ import {
 } from "../lib/appProgressStorage"
 import {
     clearOnboardingDraft,
-    readOnboardingDraftOrBaseline,
+    readOnboardingDraftOrStorage,
     writeOnboardingDraft,
 } from "../lib/onboardingDraftStorage"
-import { getViviDraftBaseline, isViviWalkthroughActive } from "../lib/viviWalkthroughStorage"
+import { writeViviBakedResultsCache } from "../lib/resultsCache"
+import {
+    DESIRED_FEELING_OPTIONS,
+    DESIRED_FEELING_PROMPT,
+} from "../lib/desiredFeeling"
+import type { DesiredFeelingId } from "../lib/reccobeatsEnrich"
+import {
+    getViviDraftBaseline,
+    getViviDraftCheckIn,
+    isViviWalkthroughActive,
+} from "../lib/viviWalkthroughStorage"
 
-import { useState, useEffect, useLayoutEffect, useMemo } from "react"
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react"
 
 import ScreenTransitionHost from "../components/ScreenTransitionHost"
 import type { SoundWaveProps } from "../components/SoundWave"
+import { prefersReducedMotion } from "../lib/screenTransition"
 
-function initialOnboardingScreens(startAtMusicProfileQuestions: boolean) {
+/** Floor horizon for the sticky wave (viewBox cy). */
+const WAVE_FLOOR_CY = 648
+/** Fade out welcome copy/CTAs before revealing the next screen. */
+const WELCOME_EXIT_FADE_MS = 900
+/** Stillness after copy is gone before the next screen arrives. */
+const WELCOME_EXIT_BEAT_MS = 700
+
+function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+        window.setTimeout(resolve, ms)
+    })
+}
+
+function initialOnboardingScreens(
+    startAtMusicProfileQuestions: boolean,
+    startAtCheckInQuestions: boolean,
+) {
     const noSavedProfile =
         typeof localStorage !== "undefined" && !localStorage.getItem("musicBaseline")
-    if (noSavedProfile && !isViviWalkthroughActive() && !startAtMusicProfileQuestions) {
+    if (
+        noSavedProfile &&
+        !isViviWalkthroughActive() &&
+        !startAtMusicProfileQuestions &&
+        !startAtCheckInQuestions
+    ) {
         return {
             showWelcomeScreen: true,
             showDemoScreen: false,
             showPrepScreen: false,
-            showMusicToMoodBridgeScreen: false,
             currentQuestion: 0,
         }
     }
 
     const saved = readOnboardingScreenProgress()
+    if (startAtCheckInQuestions) {
+        return {
+            showWelcomeScreen: false,
+            showDemoScreen: false,
+            showPrepScreen: false,
+            // Always restart at the mind question; middle answers are prefilled separately.
+            currentQuestion: 0,
+        }
+    }
     if (startAtMusicProfileQuestions) {
         return {
             showWelcomeScreen: false,
             showDemoScreen: false,
             showPrepScreen: false,
-            showMusicToMoodBridgeScreen: false,
-            currentQuestion: saved?.currentQuestion ?? 0,
+            // Genres is Q2 in the merged flow.
+            currentQuestion: saved?.currentQuestion ?? 2,
         }
     }
     if (saved) {
@@ -59,7 +98,6 @@ function initialOnboardingScreens(startAtMusicProfileQuestions: boolean) {
             showWelcomeScreen: saved.showWelcomeScreen,
             showDemoScreen: saved.showDemoScreen,
             showPrepScreen: saved.showPrepScreen,
-            showMusicToMoodBridgeScreen: saved.showMusicToMoodBridgeScreen,
             currentQuestion: saved.currentQuestion,
         }
     }
@@ -67,58 +105,8 @@ function initialOnboardingScreens(startAtMusicProfileQuestions: boolean) {
         showWelcomeScreen: true,
         showDemoScreen: false,
         showPrepScreen: false,
-        showMusicToMoodBridgeScreen: false,
         currentQuestion: 0,
     }
-}
-
-type StoredArtistHydration = { id: string; name: string; imageUrl: string }
-type StoredTrackHydration = { id: string; name: string; artists: string[]; imageUrl: string }
-
-function artistsFromBaselineStored(favArtists: MusicBaseline["favArtists"]): StoredArtistHydration[] {
-    const out: StoredArtistHydration[] = []
-    for (let i = 0; i < favArtists.length; i++) {
-        const a = favArtists[i]
-        if (typeof a === "string") {
-            const name = a.trim()
-            if (!name) continue
-            out.push({ id: `legacy-artist:${i}:${name}`, name, imageUrl: "" })
-        } else if (a && typeof a === "object" && "name" in a && typeof a.name === "string") {
-            const id =
-                "id" in a && typeof (a as { id?: string }).id === "string" && (a as { id: string }).id
-                    ? (a as { id: string }).id
-                    : `legacy-artist:${i}:${a.name}`
-            const imageUrl =
-                "imageUrl" in a && typeof (a as { imageUrl?: string }).imageUrl === "string"
-                    ? (a as { imageUrl: string }).imageUrl
-                    : ""
-            out.push({ id, name: a.name, imageUrl })
-        }
-    }
-    return out
-}
-
-function tracksFromBaselineStored(favTracks: MusicBaseline["favTracks"]): StoredTrackHydration[] {
-    const out: StoredTrackHydration[] = []
-    const rows = Array.isArray(favTracks) ? favTracks : []
-    for (const row of rows) {
-        if (!Array.isArray(row) || row.length < 3) continue
-        const name = row[0]
-        const artists = row[1]
-        const id = row[2]
-        if (typeof name !== "string" || !Array.isArray(artists) || typeof id !== "string") continue
-        let imageUrl = ""
-        if (row.length >= 4 && typeof row[3] === "string" && row[3].length > 0) {
-            imageUrl = row[3]
-        }
-        out.push({
-            id,
-            name,
-            artists: artists as string[],
-            imageUrl,
-        })
-    }
-    return out
 }
 
 /** Pause before the first sentence begins to fade in. */
@@ -130,116 +118,35 @@ const PREP_STAGGER_LINE_PAUSE_MS = 550
 /** Opacity transition length for each sentence (keep in sync with `motion-safe:duration-[900ms]` below). */
 const WELCOME_LINE_FADE_MS = 900
 
+const TOTAL_QUESTIONS = 4
+
 interface OnboardingProps {
     setView: (view: string) => void
-    /** Opens the questionnaire at question 1 (favorite genres); skips welcome and prep screens. */
+    /** Opens at genres (Q2); skips welcome and prep screens. */
     startAtMusicProfileQuestions?: boolean
+    /** Opens at the mind question (Q0); skips welcome and prep. */
+    startAtCheckInQuestions?: boolean
 }
 
-function Onboarding({ setView, startAtMusicProfileQuestions = false }: OnboardingProps) {
+type TrackOption = {
+    id: string
+    name: string
+    artists: string[]
+    imageUrl: string
+}
+
+function Onboarding({
+    setView,
+    startAtMusicProfileQuestions = false,
+    startAtCheckInQuestions = false,
+}: OnboardingProps) {
     const followAlong = useFollowAlongPersona()
-    const initialScreens = initialOnboardingScreens(startAtMusicProfileQuestions)
-    type ArtistOption = {
-        id: string
-        name: string
-        imageUrl: string
-    }
-
-    type TrackOption = {
-        id: string
-        name: string
-        artists: string[]
-        imageUrl: string
-    }
-
-    // const spotifyClientId = import.meta.env.VITE_SPOTIFY_CLIENT_ID
-    // const spotifyClientSecret = import.meta.env.VITE_SPOTIFY_CLIENT_SECRET
-
-    // const getSpotifyTokenRequest = async () => {
-    //     const response = await fetch("/accounts/api/token", {
-    //         method: "POST",
-    //         headers: {
-    //             'Authorization': 'Basic ' + (btoa(spotifyClientId + ':' + spotifyClientSecret)),
-    //             'Content-Type': 'application/x-www-form-urlencoded'
-    //         },
-    //         body: new URLSearchParams({grant_type: 'client_credentials'})     
-    //     })
-    //     const data = await response.json()
-    //     return data.access_token
-    // }
-
-    // const [spotifyToken, setSpotifyToken] = useState<string>("")
-
-    // useEffect(() => {
-    //     const fetchToken = async () => {
-    //         const tokenResult = await getSpotifyTokenRequest()
-    //         setSpotifyToken(tokenResult)
-    //     }
-    //     fetchToken()
-    // }, [])
-
-    const searchArtists = async (searchTermArtist: string) => {
-        // console.log(`/spotify/v1/search?q=${searchTermArtist}&type=artist`)
-        const token = await getSpotifyAccessToken()
-        if (!token) return {}
-        const response = await fetch(`/api/spotify-search?q=${searchTermArtist}&type=artist&token=${token}`)
-        const data = await response.json()
-        return data
-    }
-
-    const [searchTermArtist, setSearchTermArtist] = useState<string>("")
-
-    type SpotifyArtist = {
-        id: string
-        images: {height: number, url: string, width: number}[]
-        name: string
-    }
-
-    const [spotifyArtists, setSpotifyArtists] = useState<ArtistOption[]>([])
-
-    useEffect(() => {
-        let isActive = true
-        // if(!spotifyToken) return
-        if(!searchTermArtist.trim()) {
-            setSpotifyArtists([])
-            return
-        }
-
-        const timer = setTimeout(() => {
-            const fetchArtists = async () => {
-                const results = await searchArtists(searchTermArtist)
-                const artists: ArtistOption[] = (results.artists?.items ?? []).map((artist : SpotifyArtist) => ({
-                    id: artist.id,
-                    name: artist.name,
-                    imageUrl: artist.images?.[0]?.url ?? ""
-                }))
-                if (isActive) {
-                    setSpotifyArtists(artists)
-                }
-            }
-            fetchArtists()
-        }, 500) 
-
-        return () => {
-            isActive = false
-            clearTimeout(timer)
-        }
-    }, [searchTermArtist])
-
-    // console.log(spotifyArtists)
-
+    const initialScreens = initialOnboardingScreens(
+        startAtMusicProfileQuestions,
+        startAtCheckInQuestions,
+    )
 
     const searchTracks = async (searchTermTrack: string) => {
-        // console.log(`/spotify/v1/search?q=${searchTermTrack}&type=track&limit=10`)
-        // console.log("sup")
-        // const response = await fetch(`/spotify/v1/search?q=${searchTermTrack}&type=track`, {
-        //     method: "GET",
-        //     headers: {
-        //         'Authorization': 'Bearer ' + spotifyToken
-        //     }
-        // })
-        // // console.log(response.status)
-        // const data = await response.json()
         const token = await getSpotifyAccessToken()
         if (!token) return {}
         const response = await fetch(`/api/spotify-search?q=${searchTermTrack}&type=track&token=${token}`)
@@ -252,14 +159,14 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
 
     type SpotifyTrack = {
         album: {
-          album_type: string
-          artists: { id: string, name: string }[]
-          external_urls: { spotify: string }
-          href: string
-          id: string
-          images: {height: number, url: string, width: number}[]
+            album_type: string
+            artists: { id: string; name: string }[]
+            external_urls: { spotify: string }
+            href: string
+            id: string
+            images: { height: number; url: string; width: number }[]
         }
-        artists: { id: string, name: string }[]
+        artists: { id: string; name: string }[]
         disc_number: number
         duration_ms: number
         explicit: boolean
@@ -273,12 +180,10 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         track_number: number
         type: string
         uri: string
-      }
+    }
 
     useEffect(() => {
-        // let isActive = true
-        // if(!spotifyToken) return
-        if(!searchTermTrack.trim()) {
+        if (!searchTermTrack.trim()) {
             setSpotifyTracks([])
             return
         }
@@ -288,31 +193,22 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                 const results = await searchTracks(searchTermTrack)
                 const uniqueTracks = (results.tracks?.items ?? []).filter(
                     (track: SpotifyTrack, index: number, self: SpotifyTrack[]) =>
-                        index === self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track))
+                        index ===
+                        self.findIndex((t) => spotifyTrackSearchDedupKey(t) === spotifyTrackSearchDedupKey(track)),
                 )
-                const tracks: TrackOption[] = []
-                uniqueTracks.forEach((track : SpotifyTrack) => {
-                    console.log(track)
-                    tracks.push({
-                        id: track.id,
-                        name: track.name,
-                        artists: track.artists.map(artist => artist.name),
-                        imageUrl: track.album.images?.[0]?.url ?? ""
-                    })
-                })
+                const tracks: TrackOption[] = uniqueTracks.map((track: SpotifyTrack) => ({
+                    id: track.id,
+                    name: track.name,
+                    artists: track.artists.map((artist) => artist.name),
+                    imageUrl: track.album.images?.[0]?.url ?? "",
+                }))
                 setSpotifyTracks(tracks)
             }
             fetchTracks()
         }, 500)
 
         return () => clearTimeout(timer)
-        
-
-        // return () => {
-        //     isActive = false
-        // }
     }, [searchTermTrack])
-
 
     const genres = [
         "Hip Hop",
@@ -334,59 +230,59 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         "Soul",
         "Punk",
         "Alternative",
-        "Dance"
+        "Dance",
     ]
 
-    const musicContexts = [
-        "Working out",
-        "Commuting",
-        "Working or studying",
-        "Winding down",
-        "Falling asleep",
-        "Cooking",
-        "Cleaning",
-        "Socializing",
-        "Processing emotions",
-        "Getting ready",
-        "Meditating or relaxing",
-        "Driving",
-        "Taking a walk"
-    ]
-
-    const [listOfArtists, setListOfArtists] = useState<ArtistOption[]>([])
-    const [listOfTracks, setListOfTracks] = useState<TrackOption[]>([])
     const [listGenres, setListGenres] = useState<string[]>([])
-    const [listContexts, setListContexts] = useState<string[]>([])
-    const [additionalContext, setAdditionalContext] = useState<string>("")
+    const [rantSesh, setRantSesh] = useState<string>("")
+    const [listOfTracks, setListOfTracks] = useState<TrackOption[]>([])
+    const [desiredFeeling, setDesiredFeeling] = useState<DesiredFeelingId | "">("")
     const [showWelcomeScreen, setShowWelcomeScreen] = useState(() => initialScreens.showWelcomeScreen)
     const [showDemoScreen, setShowDemoScreen] = useState(() => initialScreens.showDemoScreen)
     const [showPrepScreen, setShowPrepScreen] = useState(() => initialScreens.showPrepScreen)
-    /** After the last taste question, before saving baseline and opening check-in. */
-    const [showMusicToMoodBridgeScreen, setShowMusicToMoodBridgeScreen] = useState(
-        () => initialScreens.showMusicToMoodBridgeScreen,
-    )
     const [currentQuestion, setCurrentQuestion] = useState(() => initialScreens.currentQuestion)
     const [nextBlockedHint, setNextBlockedHint] = useState<string | null>(null)
+    const [welcomeExiting, setWelcomeExiting] = useState(false)
+    const [welcomeExitDestination, setWelcomeExitDestination] = useState<"prep" | "demo" | null>(
+        null,
+    )
+    const waveCyRef = useRef(WAVE_FLOOR_CY)
 
     useLayoutEffect(() => {
         if (followAlong.walkthroughActive) {
             const baseline = getViviDraftBaseline()
+            const checkIn = getViviDraftCheckIn()
             setListGenres([...baseline.favGenres])
-            setListContexts([...baseline.personalContexts])
-            setAdditionalContext(baseline.addContext)
-            setListOfArtists(artistsFromBaselineStored(baseline.favArtists ?? []) as ArtistOption[])
-            setListOfTracks(tracksFromBaselineStored(baseline.favTracks ?? []) as TrackOption[])
+            setRantSesh(checkIn.currRant)
+            const tracks: TrackOption[] = []
+            for (const t of checkIn.currTracks ?? []) {
+                if (Array.isArray(t)) continue
+                if (!t || typeof t !== "object" || typeof t.id !== "string") continue
+                tracks.push({
+                    id: t.id,
+                    name: typeof t.name === "string" ? t.name : "",
+                    artists: Array.isArray(t.artists) ? t.artists.map(String) : [],
+                    imageUrl: typeof t.imageUrl === "string" ? t.imageUrl : "",
+                })
+            }
+            setListOfTracks(tracks)
+            setDesiredFeeling(checkIn.desiredFeeling || "")
             return
         }
 
-        const draft = readOnboardingDraftOrBaseline()
+        const draft = readOnboardingDraftOrStorage()
         if (!draft) return
         setListGenres([...draft.listGenres])
-        setListContexts([...draft.listContexts])
-        setAdditionalContext(draft.additionalContext)
-        setListOfArtists(draft.listOfArtists as ArtistOption[])
-        setListOfTracks(draft.listOfTracks as TrackOption[])
-    }, [followAlong.walkthroughActive])
+        setListOfTracks(draft.currTracks)
+        // Fresh check-in: keep genres + recent songs, clear mind + desired feeling.
+        if (startAtCheckInQuestions) {
+            setRantSesh("")
+            setDesiredFeeling("")
+        } else {
+            setRantSesh(draft.currRant)
+            setDesiredFeeling(draft.desiredFeeling || "")
+        }
+    }, [followAlong.walkthroughActive, startAtCheckInQuestions])
 
     useEffect(() => {
         writeAppProgress({ view: "onboarding" })
@@ -398,7 +294,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             showWelcomeScreen,
             showDemoScreen,
             showPrepScreen,
-            showMusicToMoodBridgeScreen,
             currentQuestion,
         })
     }, [
@@ -406,7 +301,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         showWelcomeScreen,
         showDemoScreen,
         showPrepScreen,
-        showMusicToMoodBridgeScreen,
         currentQuestion,
     ])
 
@@ -415,21 +309,13 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         const timer = window.setTimeout(() => {
             writeOnboardingDraft({
                 listGenres,
-                listContexts,
-                additionalContext,
-                listOfArtists,
-                listOfTracks,
+                currRant: rantSesh,
+                currTracks: listOfTracks,
+                desiredFeeling,
             })
         }, 400)
         return () => window.clearTimeout(timer)
-    }, [
-        followAlong.walkthroughActive,
-        listGenres,
-        listContexts,
-        additionalContext,
-        listOfArtists,
-        listOfTracks,
-    ])
+    }, [followAlong.walkthroughActive, listGenres, rantSesh, listOfTracks, desiredFeeling])
 
     useEffect(() => {
         setNextBlockedHint(null)
@@ -525,52 +411,6 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         }
     }, [showPrepScreen])
 
-    const [revealBridgeHeadline, setRevealBridgeHeadline] = useState(false)
-    const [revealBridgeBody, setRevealBridgeBody] = useState(false)
-    const [revealBridgeCta, setRevealBridgeCta] = useState(false)
-
-    useEffect(() => {
-        if (!showMusicToMoodBridgeScreen) {
-            setRevealBridgeHeadline(false)
-            setRevealBridgeBody(false)
-            setRevealBridgeCta(false)
-            return
-        }
-
-        const reduced =
-            typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
-
-        if (reduced) {
-            queueMicrotask(() => {
-                setRevealBridgeHeadline(true)
-                setRevealBridgeBody(true)
-                setRevealBridgeCta(true)
-            })
-            return undefined
-        }
-
-        const intro = WELCOME_INTRO_STILLNESS_MS
-        const fade = WELCOME_LINE_FADE_MS
-        const lineGap = PREP_STAGGER_LINE_PAUSE_MS
-        const beforeCta = WELCOME_PAUSE_BETWEEN_MS
-
-        const headlineAt = intro
-        const bodyAt = intro + fade + lineGap
-        const ctaAt = bodyAt + fade + beforeCta
-
-        const ids: ReturnType<typeof setTimeout>[] = [
-            window.setTimeout(() => setRevealBridgeHeadline(true), headlineAt),
-            window.setTimeout(() => setRevealBridgeBody(true), bodyAt),
-            window.setTimeout(() => setRevealBridgeCta(true), ctaAt),
-        ]
-
-        return () => {
-            for (const id of ids) {
-                window.clearTimeout(id)
-            }
-        }
-    }, [showMusicToMoodBridgeScreen])
-
     const welcomeRevealClass = (revealed: boolean) =>
         cn(
             "transition-opacity ease-out motion-reduce:transition-none",
@@ -579,111 +419,131 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                 : "pointer-events-none opacity-0 motion-safe:duration-0",
         )
 
-    const handleAddArtist = (artist: ArtistOption) => {
-        if (!listOfArtists.some(currArtist => currArtist.id === artist.id)){
-            setListOfArtists([...listOfArtists, artist])
-        }
-    }
-
-    const handleRemoveArtist = (artistId: string) => {
-        setListOfArtists(listOfArtists.filter(currArtist => currArtist.id !== artistId))
-    }
-
     const handleAddGenre = (genre: string) => {
-        if (listGenres.includes(genre)){
-            setListGenres(listGenres.filter(currGenre => currGenre != genre))
-        }
-        else{
+        if (listGenres.includes(genre)) {
+            setListGenres(listGenres.filter((currGenre) => currGenre != genre))
+        } else {
             setListGenres([...listGenres, genre])
         }
     }
 
+    const handleRantSession = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setRantSesh(e.target.value)
+    }
+
     const handleAddTrack = (track: TrackOption) => {
-        if (!listOfTracks.some(currTrack => currTrack.id === track.id)){
+        if (!listOfTracks.some((currTrack) => currTrack.id === track.id)) {
             setListOfTracks([...listOfTracks, track])
         }
     }
 
     const handleRemoveTrack = (trackId: string) => {
-        setListOfTracks(listOfTracks.filter(currTrack => currTrack.id !== trackId))
+        setListOfTracks(listOfTracks.filter((currTrack) => currTrack.id !== trackId))
     }
 
-    const handleAddContext = (context: string) => {
-        if (listContexts.includes(context)){
-            setListContexts(listContexts.filter(currContext => currContext != context))
-        }
-        else{
-            setListContexts([...listContexts, context])
-        }
-    }
-
-    const handleAdditionalContext = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        setAdditionalContext(e.target.value)       
+    const handleSelectDesiredFeeling = (id: string) => {
+        setDesiredFeeling((prev) => (prev === id ? "" : (id as DesiredFeelingId)))
     }
 
     const formatArtists = (artists: string[]) => {
         if (artists.length === 1) return artists[0]
-        return artists.slice(0, -1).join(', ') + ' and ' + artists[artists.length - 1]
+        return artists.slice(0, -1).join(", ") + " and " + artists[artists.length - 1]
     }
 
-    // console.log(listGenres)
-    // console.log(listOfArtists)
-    // console.log(additionalContext)
-
-    const handleBaseline = () => {
-        const baseline = {
-            favArtists: listOfArtists.map((artist) => ({
-                id: artist.id,
-                name: artist.name,
-                imageUrl: artist.imageUrl,
-            })),
-            favTracks: listOfTracks.map((track) => {
-                const row: unknown[] = [track.name, track.artists, track.id]
-                if (track.imageUrl) row.push(track.imageUrl)
-                return row
-            }),
-            favGenres: listGenres,
-            personalContexts: listContexts,
-            addContext: additionalContext
+    const handleSubmit = () => {
+        const baseline = { favGenres: listGenres }
+        const currEmotContext = {
+            currRant: rantSesh,
+            currTracks: listOfTracks,
+            desiredFeeling,
         }
-        localStorage.setItem('musicBaseline', JSON.stringify(baseline))
+        localStorage.setItem("musicBaseline", JSON.stringify(baseline))
+        localStorage.setItem("currEmotContext", JSON.stringify(currEmotContext))
         clearOnboardingDraft()
-        setView("checkin")
+        if (followAlong.walkthroughActive) {
+            writeViviBakedResultsCache()
+        }
+        setView("results")
     }
 
-    const totalQuestions = 5
-    const isLastQuestion = currentQuestion === totalQuestions - 1
+    const isLastQuestion = currentQuestion === TOTAL_QUESTIONS - 1
 
-    /** Question index 4 is optional ("anything else"); others require at least one answer. */
-    const isMusicProfileQuestionAnswered = (q: number): boolean => {
+    /** Recent songs (Q1) are optional; mind rant, genres, and desired feeling are required. */
+    const isQuestionAnswered = (q: number): boolean => {
         switch (q) {
             case 0:
-                return listGenres.length > 0
+                return rantSesh.trim().length > 0
             case 1:
-                return listOfArtists.length > 0
-            case 2:
-                return listOfTracks.length > 0
-            case 3:
-                return listContexts.length > 0
-            case 4:
                 return true
+            case 2:
+                return listGenres.length > 0
+            case 3:
+                return desiredFeeling !== ""
             default:
                 return true
         }
     }
 
-    const handleSeeItInAction = () => {
-        setShowWelcomeScreen(false)
-        setShowDemoScreen(true)
+    const resetWaveToWelcome = () => {
+        waveCyRef.current = WAVE_FLOOR_CY
+        setWelcomeExiting(false)
+        setWelcomeExitDestination(null)
     }
 
-    const resetMusicalProfileDraft = () => {
+    const goAfterWelcome = (destination: "prep" | "demo") => {
+        setShowWelcomeScreen(false)
+        setWelcomeExiting(false)
+        setWelcomeExitDestination(null)
+        waveCyRef.current = WAVE_FLOOR_CY
+        if (destination === "demo") {
+            setShowDemoScreen(true)
+            setShowPrepScreen(false)
+        } else {
+            setShowPrepScreen(true)
+            setShowDemoScreen(false)
+        }
+    }
+
+    const beginWelcomeExit = (destination: "prep" | "demo") => {
+        if (welcomeExiting) return
+        if (prefersReducedMotion()) {
+            goAfterWelcome(destination)
+            return
+        }
+        setWelcomeExitDestination(destination)
+        setWelcomeExiting(true)
+    }
+
+    /** Welcome exit: fade copy, then reveal the next screen (wave already on the floor). */
+    useEffect(() => {
+        if (!welcomeExiting || !welcomeExitDestination) return
+
+        let cancelled = false
+
+        const run = async () => {
+            await delay(WELCOME_EXIT_FADE_MS + WELCOME_EXIT_BEAT_MS)
+            if (cancelled) return
+            goAfterWelcome(welcomeExitDestination)
+        }
+
+        void run()
+
+        return () => {
+            cancelled = true
+        }
+        // Intentionally omit goAfterWelcome — destination is captured for this exit run.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [welcomeExiting, welcomeExitDestination])
+
+    const handleSeeItInAction = () => {
+        beginWelcomeExit("demo")
+    }
+
+    const resetDraft = () => {
         setListGenres([])
-        setListContexts([])
-        setAdditionalContext("")
-        setListOfArtists([])
+        setRantSesh("")
         setListOfTracks([])
-        setSearchTermArtist("")
+        setDesiredFeeling("")
         setSearchTermTrack("")
         setCurrentQuestion(0)
     }
@@ -696,8 +556,7 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
 
     const handleNext = () => {
         if (showWelcomeScreen) {
-            setShowWelcomeScreen(false)
-            setShowPrepScreen(true)
+            beginWelcomeExit("prep")
             return
         }
 
@@ -712,17 +571,27 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             return
         }
 
-        if (!isMusicProfileQuestionAnswered(currentQuestion)) {
+        if (!isQuestionAnswered(currentQuestion)) {
             setNextBlockedHint(QUESTION_REQUIRED_FOOTER_HINT)
             return
         }
         setNextBlockedHint(null)
 
         if (isLastQuestion) {
-            setShowMusicToMoodBridgeScreen(true)
+            handleSubmit()
             return
         }
-        setCurrentQuestion(prev => prev + 1)
+        setCurrentQuestion((prev) => prev + 1)
+    }
+
+    /** Keep existing middle answers and advance (fresh check-in only). */
+    const handleSkip = () => {
+        setNextBlockedHint(null)
+        if (isLastQuestion) {
+            handleSubmit()
+            return
+        }
+        setCurrentQuestion((prev) => prev + 1)
     }
 
     const handleBack = () => {
@@ -730,30 +599,69 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
         if (showDemoScreen) {
             setShowDemoScreen(false)
             setShowWelcomeScreen(true)
+            resetWaveToWelcome()
             return
         }
         if (showPrepScreen) {
             setShowPrepScreen(false)
-            resetMusicalProfileDraft()
+            resetDraft()
             followAlong.endViviWalkthrough()
             setShowWelcomeScreen(true)
-            return
-        }
-        if (showMusicToMoodBridgeScreen) {
-            setShowMusicToMoodBridgeScreen(false)
+            resetWaveToWelcome()
             return
         }
         if (currentQuestion === 0) {
+            // Fresh check-in entry starts at mind; don't walk back to prep.
+            if (startAtCheckInQuestions) return
             setShowPrepScreen(true)
             return
         }
-        setCurrentQuestion(prev => Math.max(prev - 1, 0))
+        setCurrentQuestion((prev) => Math.max(prev - 1, 0))
     }
 
     const renderCurrentQuestion = () => {
         const followAlongLocked = followAlong.walkthroughActive
 
         if (currentQuestion === 0) {
+            return (
+                <QuestionBlock
+                    kind="textarea"
+                    prompt="What's been on your mind lately?"
+                    value={rantSesh}
+                    onChange={handleRantSession}
+                    interactionLocked={followAlongLocked}
+                />
+            )
+        }
+
+        if (currentQuestion === 1) {
+            return (
+                <QuestionBlock
+                    kind="search"
+                    prompt="Are there any songs that you've been listening to recently?"
+                    searchTerm={searchTermTrack}
+                    onSearchTermChange={setSearchTermTrack}
+                    placeholder="Search for a track..."
+                    results={spotifyTracks
+                        .filter((track) => !listOfTracks.some((picked) => picked.id === track.id))
+                        .map((track) => ({
+                            id: track.id,
+                            label: `${track.name} by ${formatArtists(track.artists)}`,
+                            onSelect: () => handleAddTrack(track),
+                        }))}
+                    selectedItems={listOfTracks.map((track) => ({
+                        id: track.id,
+                        label: track.name,
+                        subtitle: formatArtists(track.artists),
+                        imageUrl: track.imageUrl,
+                    }))}
+                    onRemoveSelectedItem={handleRemoveTrack}
+                    interactionLocked={followAlongLocked}
+                />
+            )
+        }
+
+        if (currentQuestion === 2) {
             return (
                 <QuestionBlock
                     kind="multiple-choice"
@@ -766,121 +674,47 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
             )
         }
 
-        if (currentQuestion === 1) {
-            return (
-                <QuestionBlock
-                    kind="search"
-                    prompt="Who are your favorite artists?"
-                    searchTerm={searchTermArtist}
-                    onSearchTermChange={setSearchTermArtist}
-                    placeholder="Search for an artist..."
-                    results={spotifyArtists.map((artist) => ({
-                        id: artist.id,
-                        label: artist.name,
-                        onSelect: () => handleAddArtist(artist)
-                    }))}
-                    selectedItems={listOfArtists.map((artist) => ({
-                        id: artist.id,
-                        label: artist.name,
-                        imageUrl: artist.imageUrl
-                    }))}
-                    onRemoveSelectedItem={handleRemoveArtist}
-                    interactionLocked={followAlongLocked}
-                />
-            )
-        }
-
-        if (currentQuestion === 2) {
-            return (
-                <QuestionBlock
-                    kind="search"
-                    prompt="What are your most favorite songs of all time?"
-                    searchTerm={searchTermTrack}
-                    onSearchTermChange={setSearchTermTrack}
-                    placeholder="Search for a track..."
-                    results={spotifyTracks
-                        .filter((track) => !listOfTracks.some((picked) => picked.id === track.id))
-                        .map((track) => ({
-                        id: track.id,
-                        label: `${track.name} by ${formatArtists(track.artists)}`,
-                        onSelect: () => handleAddTrack(track)
-                    }))}
-                    selectedItems={listOfTracks.map((track) => ({
-                        id: track.id,
-                        label: track.name,
-                        subtitle: formatArtists(track.artists),
-                        imageUrl: track.imageUrl
-                    }))}
-                    onRemoveSelectedItem={handleRemoveTrack}
-                    interactionLocked={followAlongLocked}
-                />
-            )
-        }
-
-        if (currentQuestion === 3) {
-            return (
-                <QuestionBlock
-                    kind="multiple-choice"
-                    prompt="When do you listen to music the most?"
-                    options={musicContexts}
-                    selectedValues={listContexts}
-                    onToggle={handleAddContext}
-                    interactionLocked={followAlongLocked}
-                />
-            )
-        }
-
         return (
             <QuestionBlock
-                kind="textarea"
-                prompt="Is there anything else about your relationship with music you'd want us to know?"
-                value={additionalContext}
-                onChange={handleAdditionalContext}
+                kind="multiple-choice"
+                prompt={DESIRED_FEELING_PROMPT}
+                options={[...DESIRED_FEELING_OPTIONS]}
+                selectedValues={desiredFeeling ? [desiredFeeling] : []}
+                onToggle={handleSelectDesiredFeeling}
                 interactionLocked={followAlongLocked}
             />
         )
     }
 
-    // useEffect(() => {
-    //     const baseline = {
-    //         favArtists: listOfArtists,
-    //         favTracks: listOfTracks,
-    //         favGenres: listGenres,
-    //         personalContexts: listContexts,
-    //         addContext: additionalContext
-    //     }
-    //     localStorage.setItem('musicBaseline', JSON.stringify(baseline))
-    // }, [listOfArtists, listOfTracks, listGenres, listContexts, additionalContext])
-
     const onboardingScreenKey = useMemo(() => {
         if (showWelcomeScreen) return "welcome"
         if (showDemoScreen) return "demo"
         if (showPrepScreen) return "prep"
-        if (showMusicToMoodBridgeScreen) return "bridge"
         return `question-${currentQuestion}`
-    }, [
-        showWelcomeScreen,
-        showDemoScreen,
-        showPrepScreen,
-        showMusicToMoodBridgeScreen,
-        currentQuestion,
-    ])
+    }, [showWelcomeScreen, showDemoScreen, showPrepScreen, currentQuestion])
 
     const onboardingWave = useMemo((): SoundWaveProps => {
-        const isWelcome = onboardingScreenKey === "welcome"
         return {
-            mode: isWelcome ? "center" : "floor",
+            mode: "floor",
             color: "var(--fill)",
             swell: 0.4,
-            className: isWelcome ? "welcome-sound-wave" : undefined,
+            getCy: () => waveCyRef.current,
         }
-    }, [onboardingScreenKey])
+    }, [])
+
+    const isBackDisabled =
+        (startAtCheckInQuestions && currentQuestion === 0 && !showWelcomeScreen && !showDemoScreen && !showPrepScreen) ||
+        false
 
     let onboardingContent
 
     if (showWelcomeScreen) {
         onboardingContent = (
-            <Welcome onGetStarted={handleNext} onSeeDemo={handleSeeItInAction} />
+            <Welcome
+                onGetStarted={handleNext}
+                onSeeDemo={handleSeeItInAction}
+                exiting={welcomeExiting}
+            />
         )
     } else if (showDemoScreen) {
         onboardingContent = (
@@ -902,8 +736,8 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     } else if (showPrepScreen) {
         onboardingContent = (
             <IntroScreen
-                title="First, the music."
-                subtitle="Tell us a bit about what you listen to, so we can curate something that feels like yours."
+                title="A few questions."
+                subtitle="Tell us what you listen to and how you're feeling, so we can curate something that feels like yours."
                 showDot={false}
                 onBack={handleBack}
                 onContinue={handleNext}
@@ -915,38 +749,23 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
                 footerClassName={welcomeRevealClass(revealPrepCta)}
             />
         )
-    } else if (showMusicToMoodBridgeScreen) {
-        onboardingContent = (
-            <IntroScreen
-                title="Now, let's check in with you."
-                subtitle="A few questions about how you're feeling right now, so we can meet you there."
-                showDot={false}
-                onBack={handleBack}
-                onContinue={handleBaseline}
-                titleClassName={cn(
-                    welcomeRevealClass(revealBridgeHeadline),
-                    "intro-screen__title--soft",
-                )}
-                subtitleClassName={welcomeRevealClass(revealBridgeBody)}
-                footerClassName={welcomeRevealClass(revealBridgeCta)}
-            />
-        )
     } else {
+        const showSkip =
+            startAtCheckInQuestions && (currentQuestion === 1 || currentQuestion === 2)
+
         onboardingContent = (
             <QuestionStageLayout
                 currentQuestion={currentQuestion + 1}
-                totalQuestions={totalQuestions}
+                totalQuestions={TOTAL_QUESTIONS}
                 onBack={handleBack}
                 onNext={handleNext}
-                isBackDisabled={false}
+                onSkip={showSkip ? handleSkip : undefined}
+                skipLabel="Skip"
+                isBackDisabled={isBackDisabled}
                 nextLabel={isLastQuestion ? "Done" : "Next"}
                 nextFooterHint={nextBlockedHint}
                 questionKey={`onboarding-question-${currentQuestion}`}
-                contentVariant={
-                    currentQuestion === 1 || currentQuestion === 2
-                        ? "search-picker"
-                        : "centered"
-                }
+                contentVariant={currentQuestion === 1 ? "search-picker" : "centered"}
             >
                 {renderCurrentQuestion()}
             </QuestionStageLayout>
@@ -954,9 +773,14 @@ function Onboarding({ setView, startAtMusicProfileQuestions = false }: Onboardin
     }
 
     return (
-        <ScreenTransitionHost screenKey={onboardingScreenKey} wave={onboardingWave}>
-            {onboardingContent}
-        </ScreenTransitionHost>
+        <div className={cn("munu-flow-shell", !showWelcomeScreen && "munu-flow-shell--branded munu-flow-shell--fit")}>
+            {!showWelcomeScreen ? <FlowBrandHeader /> : null}
+            <div className="munu-flow-shell__body">
+                <ScreenTransitionHost screenKey={onboardingScreenKey} wave={onboardingWave}>
+                    {onboardingContent}
+                </ScreenTransitionHost>
+            </div>
+        </div>
     )
 }
 

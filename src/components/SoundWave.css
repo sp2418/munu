@@ -41,9 +41,3 @@
           mask: linear-gradient(to right,
      transparent 0%, #000 12%, #000 88%, transparent 100%);
 }
-
-/* Welcome: full-width wave behind centered copy (no side-only mask). */
-.sound-wave.welcome-sound-wave.sound-wave--center svg {
-  -webkit-mask: none;
-  mask: none;
-}

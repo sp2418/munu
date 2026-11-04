@@ -20,13 +20,6 @@ async function spotifyToken() {
   return data.access_token
 }
 
-async function searchArtist(token, q) {
-  const res = await fetch(
-    `${API}/api/spotify-search?q=${encodeURIComponent(q)}&type=artist&token=${encodeURIComponent(token)}`,
-  )
-  return res.json()
-}
-
 async function searchTrack(token, name, artist) {
   const res = await fetch(
     `${API}/api/spotify-search?q=${encodeURIComponent(name)}&type=track&artist=${encodeURIComponent(artist)}&token=${encodeURIComponent(token)}`,
@@ -36,24 +29,6 @@ async function searchTrack(token, name, artist) {
 
 const token = await spotifyToken()
 const def = viviFollowAlongPersona
-
-const favArtists = []
-for (const q of def.onboarding.favArtistSearchQueries) {
-  const r = await searchArtist(token, q)
-  const a = r.artists?.items?.[0]
-  if (a) favArtists.push({ id: a.id, name: a.name, imageUrl: a.images?.[0]?.url ?? "" })
-}
-
-const favTracks = []
-for (const { name, artist } of def.onboarding.favSongQueries) {
-  const r = await searchTrack(token, name, artist)
-  const t = r.tracks?.items?.[0]
-  if (t) {
-    const row = [t.name, t.artists.map((x) => x.name), t.id]
-    if (t.album?.images?.[0]?.url) row.push(t.album.images[0].url)
-    favTracks.push(row)
-  }
-}
 
 const currTracks = []
 for (const { name, artist } of def.checkIn.recentSongQueries) {
@@ -71,15 +46,11 @@ for (const { name, artist } of def.checkIn.recentSongQueries) {
 
 const musicBaseline = {
   favGenres: def.onboarding.favGenres,
-  favArtists,
-  favTracks,
-  personalContexts: def.onboarding.personalContexts,
-  addContext: def.onboarding.addContext,
 }
 
 const currEmotContext = {
   currRant: def.checkIn.currRant,
-  emotions: def.checkIn.emotions,
+  desiredFeeling: def.checkIn.desiredFeeling,
   currTracks,
 }
 

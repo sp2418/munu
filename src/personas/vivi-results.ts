@@ -26,243 +26,130 @@ export type ViviBakedResults = {
  */
 export const viviBakedResults: ViviBakedResults = {
   "parsed": {
-    "insight": "There's something interesting happening in what you're reaching for tonight. Kingston has this restless undercurrent — moderate valence but a quick tempo and minor key, which can mirror that tired-but-wired feeling exactly. Sailor Song is pulling in a different direction: low valence, acoustic, slower — that's the part of you that wants to sink into something quiet. And then Espresso shows up with high energy and brightness, almost like a part of you is trying to caffeinate its way out of the drain. That push and pull between the tracks may be amplifying the 'do I move or do I rest?' tension you're describing. When music itself is split between wired and depleted, it can be harder for your nervous system to land anywhere.",
-    "isoExplanation": "The iso-principle means meeting you where you actually are before trying to shift anywhere — because music that's too far from your current state tends to bounce off. Right now you're in a restless-but-drained place, so we'll start there with songs that hold that contradiction without judgment. From there, we'll move gradually toward quiet groundedness — low energy, gentle warmth, the kind of softness that lets your body actually exhale. Not forced calm, not a pep talk, just a slow settling into something that feels more like rest than scrolling does.",
+    "insight": "That tired-but-wired feeling is so real, and the mix you've been playing may be feeding it a little without you realizing. Kingston and Sailor Song are emotionally tender and slow-burning, which can pull you deeper into reflection, while Espresso and Glow Like Dat are bright, high-energy, danceable tracks that keep your nervous system a little activated. Bouncing between those two poles — soft ache and caffeinated pop — can leave you exactly where you described: not rested, not moving, just stuck between wanting to do something and wanting to do nothing.",
+    "isoExplanation": "The iso-principle means I start the playlist where you actually are — that slightly wired, mixed-tempo indie/R&B/pop zone — instead of dropping you straight into a spa. From there, each song eases valence, energy, and tempo down a notch until we arrive somewhere unmistakably calm. You're starting in a scattered, buzzing headspace, and we're moving toward Calm — settle down, quiet the noise, because after a long shift your system needs a soft landing more than another jolt. The arrival will still sound like you: indie/R&B/pop, just quieter and more spacious.",
     "journeySongs": [
       {
-        "title": "Cinnamon Girl",
-        "artist": "Lana Del Rey",
-        "explanation": "Holds that tired-wired tension — moody but with a pulse underneath, similar to Kingston's restless undertow."
+        "title": "Right Side of My Neck",
+        "artist": "Faye Webster",
+        "explanation": "Meeting you right where Kingston left you — same warm indie ache, mid-tempo pulse, slightly wistful valence. Before shifting toward Calm, we sit with the tender, reflective mood you're already in so the transition doesn't feel forced."
       },
       {
-        "title": "Sofia",
-        "artist": "Clairo",
-        "explanation": "Mid-tempo with a slight buzz of energy and a melancholic edge, matching the disconnected-but-still-moving feeling."
+        "title": "Pink + White",
+        "artist": "Frank Ocean",
+        "explanation": "Matching your starting zone with familiar R&B warmth and a gentle groove that mirrors the bounce of Espresso and Glow Like Dat without the caffeine spike. Still meeting you where you are before the settle begins."
       },
       {
-        "title": "Amoeba",
-        "artist": "Clairo",
-        "explanation": "Restless lyrically, mid-energy sonically — sits right in your current zone of overwhelmed reflection."
+        "title": "The Only Exception",
+        "artist": "Paramore",
+        "explanation": "Holding the emotional temperature of Sailor Song — intimate, mid-energy, a little bittersweet. This is the last of the meeting-you-here songs before we start easing the noise down toward Calm."
       },
       {
-        "title": "N Side",
-        "artist": "Steve Lacy",
-        "explanation": "Has that hazy, slightly wired quality with low-key groove, mirroring the in-between state you described."
+        "title": "Motion Sickness",
+        "artist": "Phoebe Bridgers",
+        "explanation": "First small step toward Calm: tempo stays similar but the production opens up and softens compared to Pink + White, trading rhythmic bounce for a wider, more spacious indie feel. The wired edge starts to loosen."
       },
       {
-        "title": "Bad Habit",
-        "artist": "Steve Lacy",
-        "explanation": "Still groove-forward but starting to soften, easing the tempo while keeping you engaged."
+        "title": "Self",
+        "artist": "Noname",
+        "explanation": "Another gentle step down — lower energy and a hushed, jazzy R&B texture that's quieter than Motion Sickness. The nervous-system activation keeps dialing back toward Calm."
       },
       {
-        "title": "I Have Nothing to Tell You",
-        "artist": "Clairo",
-        "explanation": "Pulls energy down noticeably — acoustic, gentle, a quieter exhale beginning."
+        "title": "Ivy",
+        "artist": "Frank Ocean",
+        "explanation": "Softer valence and less rhythmic drive than Self, with airy guitar and vocals that feel like exhaling. We're clearly moving away from wired and closer to settled."
       },
       {
-        "title": "Find Someone Like You",
-        "artist": "Snoh Aalegra",
-        "explanation": "Smooth R&B warmth, lower energy, valence rising slightly toward something tender."
+        "title": "Georgia",
+        "artist": "Phoebe Bridgers",
+        "explanation": "Even more restrained than Ivy — slower tempo, sparser arrangement, higher acousticness. The playlist is now firmly tilting toward quiet; the noise in your head has less to grab onto."
       },
       {
-        "title": "I Wanna Be Yours",
-        "artist": "Arctic Monkeys",
-        "explanation": "Slow, hypnotic, low energy — invites your body to settle without demanding anything."
+        "title": "Godspeed",
+        "artist": "Frank Ocean",
+        "explanation": "Landing phase begins. Just piano and voice — the most spacious R&B moment yet. Energy drops noticeably from Georgia, and the whole track feels like the room getting still around you."
       },
       {
-        "title": "Pluto Projector",
-        "artist": "Rex Orange County",
-        "explanation": "Acoustic, reflective, gently warm — the tension starts to dissolve into something softer."
+        "title": "Punisher",
+        "artist": "Phoebe Bridgers",
+        "explanation": "Deeper into Calm than Godspeed — hushed indie textures, slow tempo, almost whispered vocals. Any remaining wired edge dissolves here; this is the sound of the phone going face-down."
       },
       {
-        "title": "Best Friend",
-        "artist": "Rex Orange County",
-        "explanation": "Mid-tempo with a quiet contentment, easing valence upward while keeping energy mellow."
-      },
-      {
-        "title": "Sunflower, Vol. 6",
-        "artist": "Harry Styles",
-        "explanation": "Light, airy, gently buoyant — a small lift without breaking the calm."
-      },
-      {
-        "title": "Cherry",
-        "artist": "Harry Styles",
-        "explanation": "Acoustic-leaning, low energy, a little wistful but settled."
-      },
-      {
-        "title": "Lost in Japan",
-        "artist": "Shawn Mendes",
-        "explanation": "Soft R&B-pop texture, smooth and unhurried — closer to groundedness now."
-      },
-      {
-        "title": "Get You",
-        "artist": "Daniel Caesar",
-        "explanation": "Warm, slow, reassuring R&B that lets your nervous system land somewhere."
-      },
-      {
-        "title": "Japanese Denim",
-        "artist": "Daniel Caesar",
-        "explanation": "Acoustic and intimate, valence gently positive — the texture of quiet contentment."
-      },
-      {
-        "title": "Ugotme",
-        "artist": "Omar Apollo",
-        "explanation": "Soft, slow groove with a warm low end — approaching that grounded zone."
-      },
-      {
-        "title": "Slow Burn",
-        "artist": "Kacey Musgraves",
-        "explanation": "Title says it all — low energy, moderate valence, the sound of finally settling in."
-      },
-      {
-        "title": "I Want You",
-        "artist": "Snoh Aalegra",
-        "explanation": "Lush, gentle R&B with a calm warmth — destination texture."
-      },
-      {
-        "title": "Love Again",
-        "artist": "Daniel Caesar",
-        "explanation": "Tender, low-energy, quietly hopeful — emotional arrival in your taste zone."
-      },
-      {
-        "title": "Alewife",
-        "artist": "Clairo",
-        "explanation": "Soft, acoustic, reflective but at peace — the quiet groundedness we were moving toward."
+        "title": "Nikes",
+        "artist": "Frank Ocean",
+        "explanation": "The clearest arrival at Calm — settle down, quiet the noise in your R&B/indie world. Ambient, weightless, extremely low energy, minimal rhythm, spacious production. Nothing in this song asks anything of you. This is the quiet you were trying to give yourself when you picked up your phone instead."
       }
     ]
   },
   "journeySongsResolved": [
     {
-      "title": "Cinnamon Girl",
-      "artist": "Lana Del Rey",
-      "explanation": "Holds that tired-wired tension — moody but with a pulse underneath, similar to Kingston's restless undertow.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273879e9318cb9f4e05ee552ac9",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/86/ab/c9/86abc949-717d-b99e-ccc1-2d06a10e01d6/mzaf_13331833199397738074.plus.aac.p.m4a"
+      "title": "Right Side of My Neck",
+      "artist": "Faye Webster",
+      "explanation": "Meeting you right where Kingston left you — same warm indie ache, mid-tempo pulse, slightly wistful valence. Before shifting toward Calm, we sit with the tender, reflective mood you're already in so the transition doesn't feel forced.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273ac4ebd092fa2cf210e4c8023",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/c0/7b/94/c07b94c4-9e32-f5cf-d5d7-4be5a81de3c3/mzaf_11887277500147069284.plus.aac.p.m4a"
     },
     {
-      "title": "Sofia",
-      "artist": "Clairo",
-      "explanation": "Mid-tempo with a slight buzz of energy and a melancholic edge, matching the disconnected-but-still-moving feeling.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2733e4fc846c2b52b9cb6ff2e1f",
+      "title": "Pink + White",
+      "artist": "Frank Ocean",
+      "explanation": "Matching your starting zone with familiar R&B warmth and a gentle groove that mirrors the bounce of Espresso and Glow Like Dat without the caffeine spike. Still meeting you where you are before the settle begins.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273c5649add07ed3720be9d5526",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/ba/11/dc/ba11dccd-16d2-9cd8-13f0-85b73acc0a09/mzaf_1304250511099243436.plus.aac.p.m4a"
+    },
+    {
+      "title": "The Only Exception",
+      "artist": "Paramore",
+      "explanation": "Holding the emotional temperature of Sailor Song — intimate, mid-energy, a little bittersweet. This is the last of the meeting-you-here songs before we start easing the noise down toward Calm.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273e01d7d558032457b0e4883f6",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/87/e7/01/87e70139-c81e-19d6-4925-c76ba9b463b4/mzaf_12896696086532100140.plus.aac.p.m4a"
+    },
+    {
+      "title": "Motion Sickness",
+      "artist": "Phoebe Bridgers",
+      "explanation": "First small step toward Calm: tempo stays similar but the production opens up and softens compared to Pink + White, trading rhythmic bounce for a wider, more spacious indie feel. The wired edge starts to loosen.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27308afb5dc296054856909f8fd",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/79/aa/f0/79aaf0a7-0e30-e89a-a3a6-1a69da269122/mzaf_3784094890298250010.plus.aac.p.m4a"
+    },
+    {
+      "title": "Self",
+      "artist": "Noname",
+      "explanation": "Another gentle step down — lower energy and a hushed, jazzy R&B texture that's quieter than Motion Sickness. The nervous-system activation keeps dialing back toward Calm.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273f65df5cd2490bff182ddd2fd",
       "previewUrl": null
     },
     {
-      "title": "Amoeba",
-      "artist": "Clairo",
-      "explanation": "Restless lyrically, mid-energy sonically — sits right in your current zone of overwhelmed reflection.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2732624442cf48e4962d1422da8",
+      "title": "Ivy",
+      "artist": "Frank Ocean",
+      "explanation": "Softer valence and less rhythmic drive than Self, with airy guitar and vocals that feel like exhaling. We're clearly moving away from wired and closer to settled.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273c5649add07ed3720be9d5526",
       "previewUrl": null
     },
     {
-      "title": "N Side",
-      "artist": "Steve Lacy",
-      "explanation": "Has that hazy, slightly wired quality with low-key groove, mirroring the in-between state you described.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273962ff78ff496c98e5fed40d8",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/84/87/ac/8487ac3c-b335-b5c2-f24e-07cf0d379039/mzaf_16949476144805226185.plus.aac.p.m4a"
+      "title": "Georgia",
+      "artist": "Phoebe Bridgers",
+      "explanation": "Even more restrained than Ivy — slower tempo, sparser arrangement, higher acousticness. The playlist is now firmly tilting toward quiet; the noise in your head has less to grab onto.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2736c26e4a2e4df94a55591c48f",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/12/6b/69/126b690a-0504-f1af-a741-7bb65642c26a/mzaf_3271075927843994525.plus.aac.p.m4a"
     },
     {
-      "title": "Bad Habit",
-      "artist": "Steve Lacy",
-      "explanation": "Still groove-forward but starting to soften, easing the tempo while keeping you engaged.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2736938311000a0e494a26986e5",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/b5/f3/90/b5f390d1-ab47-f76e-4311-89ad4a34333f/mzaf_802265940992462461.plus.aac.p.m4a"
+      "title": "Godspeed",
+      "artist": "Frank Ocean",
+      "explanation": "Landing phase begins. Just piano and voice — the most spacious R&B moment yet. Energy drops noticeably from Georgia, and the whole track feels like the room getting still around you.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273c5649add07ed3720be9d5526",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/12/39/65/1239657a-e24a-7445-1182-08e794600062/mzaf_7593396232276030207.plus.aac.p.m4a"
     },
     {
-      "title": "Find Someone Like You",
-      "artist": "Snoh Aalegra",
-      "explanation": "Smooth R&B warmth, lower energy, valence rising slightly toward something tender.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27396b5701b2aa3ed406eeab110",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/6f/4c/b6/6f4cb680-bc13-d736-1ca1-0537fe7e88d6/mzaf_520797579691367508.plus.aac.p.m4a"
+      "title": "Punisher",
+      "artist": "Phoebe Bridgers",
+      "explanation": "Deeper into Calm than Godspeed — hushed indie textures, slow tempo, almost whispered vocals. Any remaining wired edge dissolves here; this is the sound of the phone going face-down.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273a91b75c9ef65ed8d760ff600",
+      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/d3/20/23/d32023ee-35a7-c39a-12e8-1e176e88b3ca/mzaf_602701284877076324.plus.aac.p.m4a"
     },
     {
-      "title": "I Wanna Be Yours",
-      "artist": "Arctic Monkeys",
-      "explanation": "Slow, hypnotic, low energy — invites your body to settle without demanding anything.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2734ae1c4c5c45aabe565499163",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/a8/75/04/a87504ce-b0f6-37db-49ea-f09e8c06118d/mzaf_4845239976579051457.plus.aac.p.m4a"
-    },
-    {
-      "title": "Pluto Projector",
-      "artist": "Rex Orange County",
-      "explanation": "Acoustic, reflective, gently warm — the tension starts to dissolve into something softer.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273bf6bb9e37fd5aaa8f8559f07",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/4a/51/1e/4a511ed5-7b83-cd64-b07b-4b748f4fcd17/mzaf_17171592434095602214.plus.aac.p.m4a"
-    },
-    {
-      "title": "Best Friend",
-      "artist": "Rex Orange County",
-      "explanation": "Mid-tempo with a quiet contentment, easing valence upward while keeping energy mellow.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273ff874602e13e9181c26e5f01",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/c4/5a/e8/c45ae83a-779f-680d-67f9-2564acaf628b/mzaf_10235465774711850402.plus.aac.p.m4a"
-    },
-    {
-      "title": "Sunflower, Vol. 6",
-      "artist": "Harry Styles",
-      "explanation": "Light, airy, gently buoyant — a small lift without breaking the calm.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27325180571abce9472f61bd722",
-      "previewUrl": null
-    },
-    {
-      "title": "Cherry",
-      "artist": "Harry Styles",
-      "explanation": "Acoustic-leaning, low energy, a little wistful but settled.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27325180571abce9472f61bd722",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview125/v4/84/31/4a/84314a72-b42a-1bb3-9c43-702f8a585e74/mzaf_12430158979087766363.plus.aac.p.m4a"
-    },
-    {
-      "title": "Lost in Japan",
-      "artist": "Shawn Mendes",
-      "explanation": "Soft R&B-pop texture, smooth and unhurried — closer to groundedness now.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273269423eb6467e308c0fbce24",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a4/fa/c7/a4fac734-34a2-4ea5-d1b3-55ddb669163a/mzaf_6097688372449855718.plus.aac.p.m4a"
-    },
-    {
-      "title": "Get You",
-      "artist": "Daniel Caesar",
-      "explanation": "Warm, slow, reassuring R&B that lets your nervous system land somewhere.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2737aa8783ad8def37cc548a9cf",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/a2/64/7e/a2647e53-f16c-ec35-0b41-cf6a65ab69a2/mzaf_7427365009000821098.plus.aac.p.m4a"
-    },
-    {
-      "title": "Japanese Denim",
-      "artist": "Daniel Caesar",
-      "explanation": "Acoustic and intimate, valence gently positive — the texture of quiet contentment.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2737465bef53d9e3a27c63c7a1d",
-      "previewUrl": null
-    },
-    {
-      "title": "Ugotme",
-      "artist": "Omar Apollo",
-      "explanation": "Soft, slow groove with a warm low end — approaching that grounded zone.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27378575822e829540fdd49109e",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/4e/24/6c/4e246c95-b71f-41cd-a51f-2fa39205cd89/mzaf_4948885045187295215.plus.aac.p.m4a"
-    },
-    {
-      "title": "Slow Burn",
-      "artist": "Kacey Musgraves",
-      "explanation": "Title says it all — low energy, moderate valence, the sound of finally settling in.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2732e35d25eb7288830d5540484",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/48/8d/f0/488df0f1-a7b6-845d-6374-e9e1ea624df2/mzaf_9984810318127629642.plus.aac.p.m4a"
-    },
-    {
-      "title": "I Want You",
-      "artist": "Snoh Aalegra",
-      "explanation": "Lush, gentle R&B with a calm warmth — destination texture.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b27396b5701b2aa3ed406eeab110",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview115/v4/e2/f5/6d/e2f56dd7-94b6-54cd-520e-552c77010bba/mzaf_9481305734597914667.plus.aac.p.m4a"
-    },
-    {
-      "title": "Love Again",
-      "artist": "Daniel Caesar",
-      "explanation": "Tender, low-energy, quietly hopeful — emotional arrival in your taste zone.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273969c21ea34fe372a3e468947",
-      "previewUrl": "https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/a6/2d/f1/a62df101-6405-0194-e697-7402ef6297cd/mzaf_1695986122675849997.plus.aac.p.m4a"
-    },
-    {
-      "title": "Alewife",
-      "artist": "Clairo",
-      "explanation": "Soft, acoustic, reflective but at peace — the quiet groundedness we were moving toward.",
-      "imageUrl": "https://i.scdn.co/image/ab67616d0000b2733e4fc846c2b52b9cb6ff2e1f",
+      "title": "Nikes",
+      "artist": "Frank Ocean",
+      "explanation": "The clearest arrival at Calm — settle down, quiet the noise in your R&B/indie world. Ambient, weightless, extremely low energy, minimal rhythm, spacious production. Nothing in this song asks anything of you. This is the quiet you were trying to give yourself when you picked up your phone instead.",
+      "imageUrl": "https://i.scdn.co/image/ab67616d0000b273c5649add07ed3720be9d5526",
       "previewUrl": null
     }
   ]

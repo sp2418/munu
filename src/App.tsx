@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Analytics } from "@vercel/analytics/react"
-import './App.css'
 import Onboarding from './stages/Onboarding'
-import CheckIn from './stages/Check-In'
 import Results from './stages/Results'
-import { clearCheckInRantAndEmotionsKeepTracksInStorage } from './lib/currEmotContextStorage'
+import { clearCheckInRantKeepTracksInStorage } from './lib/currEmotContextStorage'
 import {
   readInitialAppView,
   resetSessionForFreshStart,
   writeAppProgress,
   type AppView,
 } from './lib/appProgressStorage'
-import { clearCheckInDraft } from './lib/checkInDraftStorage'
+import { clearOnboardingDraft } from './lib/onboardingDraftStorage'
+import {
+  CLAUDE_RESPONSE_CACHE_KEY,
+  RESULTS_JOURNEY_CACHE_KEY,
+} from './lib/resultsCache'
 import { FollowAlongPersonaProvider, useFollowAlongPersona } from './context/FollowAlongPersonaContext'
 import FollowAlongBanner from './components/FollowAlongBanner'
 import ScreenTransitionHost from './components/ScreenTransitionHost'
@@ -27,8 +29,10 @@ function AppContent() {
     setCurrentViewState(next)
     writeAppProgress({ view: next })
   }, [])
-  /** When true, onboarding mounts straight at the first music taste question (skips welcome + prep). */
+  /** When true, onboarding mounts straight at genres (skips welcome + prep). */
   const [onboardingStartAtMusicProfile, setOnboardingStartAtMusicProfile] = useState(false)
+  /** When true, onboarding mounts at the mind question (fresh check-in). */
+  const [onboardingStartAtCheckIn, setOnboardingStartAtCheckIn] = useState(false)
   /** Remount onboarding after exiting ViVi follow-along so internal screen state resets. */
   const [onboardingMountKey, setOnboardingMountKey] = useState(0)
   const prevViewRef = useRef<string>(currentView)
@@ -42,6 +46,7 @@ function AppContent() {
     prevViewRef.current = currentView
     if (prev === "onboarding" && currentView !== "onboarding") {
       setOnboardingStartAtMusicProfile(false)
+      setOnboardingStartAtCheckIn(false)
     }
   }, [currentView])
 
@@ -51,21 +56,25 @@ function AppContent() {
     localStorage.removeItem('currEmotContext')
     resetSessionForFreshStart()
     setOnboardingStartAtMusicProfile(false)
+    setOnboardingStartAtCheckIn(false)
     setOnboardingMountKey((k) => k + 1)
     setCurrentView('onboarding')
   }, [followAlong, setCurrentView])
 
-  const handleRebuildMusicProfile = () => {
-    clearCheckInRantAndEmotionsKeepTracksInStorage()
-    setOnboardingStartAtMusicProfile(true)
-    setCurrentView("onboarding")
-  }
-
   const handleFreshCheckIn = () => {
-    clearCheckInRantAndEmotionsKeepTracksInStorage()
-    clearCheckInDraft()
+    clearCheckInRantKeepTracksInStorage()
+    clearOnboardingDraft()
+    try {
+      localStorage.removeItem(CLAUDE_RESPONSE_CACHE_KEY)
+      localStorage.removeItem(RESULTS_JOURNEY_CACHE_KEY)
+    } catch {
+      /* ignore */
+    }
     followAlong.endViviWalkthrough()
-    setCurrentView("checkin")
+    setOnboardingStartAtMusicProfile(false)
+    setOnboardingStartAtCheckIn(true)
+    setOnboardingMountKey((k) => k + 1)
+    setCurrentView("onboarding")
   }
 
   const renderCurrentView = () => {
@@ -75,26 +84,27 @@ function AppContent() {
           key={onboardingMountKey}
           setView={setCurrentView}
           startAtMusicProfileQuestions={onboardingStartAtMusicProfile}
+          startAtCheckInQuestions={onboardingStartAtCheckIn}
         />
       )
     }
-    if (currentView === "checkin") {
-      return <CheckIn setView={setCurrentView} />
-    }
     return (
       <Results
-        onRebuildMusicProfile={handleRebuildMusicProfile}
         onStartCheckInFresh={handleFreshCheckIn}
         onExitFollowAlongToWelcome={exitFollowAlongToWelcome}
       />
     )
   }
 
+  /** Include mount key so remounting onboarding (exit walkthrough → welcome) crossfades. */
+  const appScreenKey =
+    currentView === "onboarding" ? `onboarding-${onboardingMountKey}` : currentView
+
   return (
     <div>
       <FollowAlongBanner onExitNavigation={exitFollowAlongToWelcome} />
       <Analytics />
-      <ScreenTransitionHost screenKey={currentView}>
+      <ScreenTransitionHost screenKey={appScreenKey}>
         {renderCurrentView()}
       </ScreenTransitionHost>
     </div>

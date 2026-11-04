@@ -55,7 +55,7 @@ export default function StoryScreen({
       </div>
 
       {onBack || onContinue ? (
-        <div className={cn("story-screen__footer", footerClassName)}>
+        <div className={cn("story-screen__footer munu-floor-cta", footerClassName)}>
           {onBack ? (
             <button type="button" className="story-screen__back" onClick={onBack}>
               {backLabel}

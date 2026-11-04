@@ -10,12 +10,12 @@ export function parseCurrEmotContextFromStorage(): CurrEmotContext | null {
   }
 }
 
-/** Keeps songs from the prior check-in; clears mind + emotions fields for fresh Q0 / Q1. */
-export function clearCheckInRantAndEmotionsKeepTracksInStorage(): void {
+/** Keeps songs from the prior check-in; clears mind + desired-feeling for a fresh start. */
+export function clearCheckInRantKeepTracksInStorage(): void {
   const prev = parseCurrEmotContextFromStorage()
   const next: CurrEmotContext = {
     currRant: "",
-    emotions: [],
+    desiredFeeling: "",
     currTracks: Array.isArray(prev?.currTracks) ? prev.currTracks : [],
   }
   localStorage.setItem("currEmotContext", JSON.stringify(next))

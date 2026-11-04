@@ -88,8 +88,7 @@ export function writeViviBakedResultsCache(
       localStorage.setItem(RESULTS_JOURNEY_CACHE_KEY, JSON.stringify(journeyPayload))
     }
     return true
-  } catch (e) {
-    console.warn("Could not seed ViVi baked results cache:", e)
+  } catch {
     return false
   }
 }

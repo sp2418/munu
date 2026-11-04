@@ -1,20 +1,14 @@
-import { clearCheckInDraft } from "./checkInDraftStorage"
 import { clearOnboardingDraft } from "./onboardingDraftStorage"
 import { isViviWalkthroughActive } from "./viviWalkthroughStorage"
 
 const APP_PROGRESS_KEY = "munu.appProgress.v1"
 
-export type AppView = "onboarding" | "checkin" | "results"
+export type AppView = "onboarding" | "results"
 
 export type OnboardingScreenProgress = {
   showWelcomeScreen: boolean
   showDemoScreen: boolean
   showPrepScreen: boolean
-  showMusicToMoodBridgeScreen: boolean
-  currentQuestion: number
-}
-
-export type CheckInScreenProgress = {
   currentQuestion: number
 }
 
@@ -26,7 +20,6 @@ export type ResultsScreenProgress = {
 export type AppProgress = {
   view: AppView
   onboarding?: OnboardingScreenProgress
-  checkIn?: CheckInScreenProgress
   results?: ResultsScreenProgress
 }
 
@@ -43,7 +36,7 @@ function parseJson<T>(raw: string | null): T | null {
 export function inferViewFromStorage(): AppView {
   if (typeof localStorage === "undefined") return "onboarding"
   if (!localStorage.getItem("musicBaseline")) return "onboarding"
-  if (!localStorage.getItem("currEmotContext")) return "checkin"
+  if (!localStorage.getItem("currEmotContext")) return "onboarding"
   return "results"
 }
 
@@ -52,7 +45,6 @@ function viewAllowedByStorage(view: AppView): boolean {
   const hasBaseline = !!localStorage.getItem("musicBaseline")
   const hasCheckIn = !!localStorage.getItem("currEmotContext")
   if (view === "results") return hasBaseline && hasCheckIn
-  if (view === "checkin") return hasBaseline
   return true
 }
 
@@ -60,7 +52,6 @@ function viewAllowedByStorage(view: AppView): boolean {
 export function resetSessionForFreshStart(): void {
   clearAppProgress()
   clearOnboardingDraft()
-  clearCheckInDraft()
 }
 
 /** Restore last screen when valid; otherwise fall back to profile-based routing. */
@@ -77,14 +68,22 @@ export function readInitialAppView(): AppView {
   const fallback = inferViewFromStorage()
   if (typeof sessionStorage === "undefined") return fallback
 
-  const saved = parseJson<AppProgress>(sessionStorage.getItem(APP_PROGRESS_KEY))
-  if (!saved?.view || !viewAllowedByStorage(saved.view)) return fallback
-  return saved.view
+  const saved = parseJson<AppProgress & { view?: string }>(sessionStorage.getItem(APP_PROGRESS_KEY))
+  // Legacy "checkin" view collapses into the merged onboarding flow.
+  const view: AppView | undefined =
+    saved?.view === "checkin" ? "onboarding" : (saved?.view as AppView | undefined)
+  if (!view || !viewAllowedByStorage(view)) return fallback
+  return view
 }
 
 export function readAppProgress(): AppProgress | null {
   if (typeof sessionStorage === "undefined") return null
-  return parseJson<AppProgress>(sessionStorage.getItem(APP_PROGRESS_KEY))
+  const saved = parseJson<AppProgress & { view?: string }>(sessionStorage.getItem(APP_PROGRESS_KEY))
+  if (!saved) return null
+  if (saved.view === "checkin") {
+    return { ...saved, view: "onboarding" }
+  }
+  return saved as AppProgress
 }
 
 export function writeAppProgress(patch: Partial<AppProgress> & { view: AppView }): void {
@@ -93,7 +92,6 @@ export function writeAppProgress(patch: Partial<AppProgress> & { view: AppView }
   const next: AppProgress = {
     view: patch.view,
     onboarding: patch.onboarding ?? prev?.onboarding,
-    checkIn: patch.checkIn ?? prev?.checkIn,
     results: patch.results ?? prev?.results,
   }
   try {
@@ -114,14 +112,6 @@ export function readOnboardingScreenProgress(): OnboardingScreenProgress | null 
 
 export function writeOnboardingScreenProgress(onboarding: OnboardingScreenProgress): void {
   writeAppProgress({ view: "onboarding", onboarding })
-}
-
-export function readCheckInScreenProgress(): CheckInScreenProgress | null {
-  return readAppProgress()?.checkIn ?? null
-}
-
-export function writeCheckInScreenProgress(checkIn: CheckInScreenProgress): void {
-  writeAppProgress({ view: "checkin", checkIn })
 }
 
 export function readResultsScreenProgress(): ResultsScreenProgress | null {

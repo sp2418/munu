@@ -1,4 +1,5 @@
 import {
+  useLayoutEffect,
   useEffect,
   useRef,
   useState,
@@ -46,8 +47,9 @@ export default function ScreenTransitionHost({
   className,
   wave = null,
 }: ScreenTransitionHostProps) {
+  /** Last committed children for the current key — used to freeze the outgoing screen. */
   const childrenRef = useRef(children)
-  childrenRef.current = children
+  const screenKeyRef = useRef(screenKey)
 
   const [layers, setLayers] = useState<ScreenLayer[]>(() => [
     {
@@ -59,16 +61,25 @@ export default function ScreenTransitionHost({
     },
   ])
 
-  useEffect(() => {
-    setLayers((prev) => {
-      const active = prev.find((layer) => layer.phase === "active")
-      if (active?.key === screenKey) {
-        return prev
-      }
+  useLayoutEffect(() => {
+    if (screenKeyRef.current === screenKey) {
+      childrenRef.current = children
+      return
+    }
 
+    const outgoingContent = childrenRef.current
+    screenKeyRef.current = screenKey
+    childrenRef.current = children
+
+    setLayers((prev) => {
       const exiting = prev.map((layer) =>
         layer.phase === "active"
-          ? { ...layer, content: childrenRef.current, phase: "exiting" as const, interactive: false }
+          ? {
+              ...layer,
+              content: outgoingContent,
+              phase: "exiting" as const,
+              interactive: false,
+            }
           : layer,
       )
 
@@ -77,13 +88,13 @@ export default function ScreenTransitionHost({
         {
           id: nextLayerId(),
           key: screenKey,
-          content: childrenRef.current,
+          content: children,
           phase: "active",
           interactive: false,
         },
       ]
     })
-  }, [screenKey])
+  }, [screenKey, children])
 
   useEffect(() => {
     const pending = layers.filter(

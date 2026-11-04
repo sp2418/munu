@@ -11,9 +11,16 @@ import {
 } from "./ui/command"
 import { Textarea } from "./ui/textarea"
 
+export type MultipleChoiceOption = {
+  id: string
+  label: string
+  subtitle?: string
+}
+
 type MultipleChoiceQuestion = {
   kind: "multiple-choice"
-  options: string[]
+  /** Plain strings (genres) or `{ id, label, subtitle? }` objects. */
+  options: Array<string | MultipleChoiceOption>
   selectedValues: string[]
   onToggle: (value: string) => void
 }
@@ -215,20 +222,31 @@ function QuestionBlock(props: QuestionBlockProps) {
             aria-disabled={locked}
           >
             {props.options.map((option) => {
-              const selected = props.selectedValues.includes(option)
+              const id = typeof option === "string" ? option : option.id
+              const label = typeof option === "string" ? option : option.label
+              const subtitle = typeof option === "string" ? undefined : option.subtitle
+              const selected = props.selectedValues.includes(id)
               return (
                 <Badge
-                  key={option}
+                  key={id}
                   variant="outline"
                   aria-pressed={selected}
                   className={cn(
                     "munu-chip",
+                    subtitle && "munu-chip--with-subtitle",
                     locked ? "cursor-default select-none" : "cursor-pointer",
                     locked && !selected && "opacity-45",
                   )}
-                  onClick={locked ? undefined : () => props.onToggle(option)}
+                  onClick={locked ? undefined : () => props.onToggle(id)}
                 >
-                  {option}
+                  {subtitle ? (
+                    <>
+                      <span className="munu-chip__label">{label}</span>
+                      <span className="munu-chip__subtitle">{subtitle}</span>
+                    </>
+                  ) : (
+                    label
+                  )}
                 </Badge>
               )
             })}

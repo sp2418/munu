@@ -1,0 +1,130 @@
+/* Persistent brand lockup — in-flow by default so content lays out beneath it. */
+
+.munu-flow-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
+}
+
+.munu-flow-shell__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+/*
+ * Branded (Results + onboarding): fill remaining space under the logo.
+ * Do NOT lock height:100% here — Results playlist phase must grow/scroll.
+ * Onboarding uses --fit below for a fixed viewport stack.
+ */
+.munu-flow-shell--branded .munu-flow-shell__body .screen-transition-host,
+.munu-flow-shell--branded .munu-flow-shell__body .screen-transition-layer {
+  min-height: 100%;
+}
+
+.munu-flow-shell--branded .intro-screen,
+.munu-flow-shell--branded .story-screen,
+.munu-flow-shell--branded .munu-question-stage {
+  min-height: 100%;
+}
+
+/*
+ * Onboarding only: lock to the viewport so story/intro/question footers sit on
+ * the visible bottom under the logo. Results stays scrollable (no --fit).
+ *
+ * Brand overlays the stage so content can true-center on the full page.
+ * Host / layer / screen must all keep a definite height — if any collapse to
+ * content height, justify-content:center has no free space and everything
+ * sticks to the top.
+ */
+.munu-flow-shell--branded.munu-flow-shell--fit {
+  position: relative;
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
+}
+
+.munu-flow-shell--branded.munu-flow-shell--fit .munu-flow-brand {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+}
+
+.munu-flow-shell--branded.munu-flow-shell--fit .munu-flow-shell__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.munu-flow-shell--branded.munu-flow-shell--fit .munu-flow-shell__body .screen-transition-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+}
+
+.munu-flow-shell--branded.munu-flow-shell--fit .munu-flow-shell__body .screen-transition-layer {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+}
+
+.munu-flow-shell--branded.munu-flow-shell--fit .intro-screen,
+.munu-flow-shell--branded.munu-flow-shell--fit .story-screen,
+.munu-flow-shell--branded.munu-flow-shell--fit .munu-question-stage {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.munu-flow-brand {
+  --munu-flow-brand-height: calc(1.75rem + 0.85rem + 64px);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 1.75rem 1rem 0.85rem 1.5rem;
+  background: var(--background, #f8f4ec);
+  pointer-events: none;
+  animation: munu-flow-brand-in 900ms ease-out both;
+}
+
+.munu-flow-shell--branded {
+  --munu-flow-brand-height: calc(1.75rem + 0.85rem + 64px);
+}
+
+.munu-flow-brand > * {
+  pointer-events: auto;
+}
+
+@keyframes munu-flow-brand-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .munu-flow-brand {
+    animation: none;
+  }
+}

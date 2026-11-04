@@ -1,171 +1,260 @@
-import type { CSSProperties, ReactNode } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react"
+import { createPortal } from "react-dom"
+import { Info } from "lucide-react"
 
-import SoundWave from "./SoundWave"
 import { cn } from "../lib/utils"
 import "./ArrivalScreens.css"
 
-export interface PlaylistSong {
-  name?: string
-  artist?: string
-  note?: string
-  art?: string
-  duration?: string
-}
-
 export interface PlaylistScreenProps {
   title?: ReactNode
-  song?: PlaylistSong
-  index?: number
-  count?: number
-  previewBar?: ReactNode
-  onPrev?: () => void
-  onNext?: () => void
   onWhy?: () => void
   whyButtonId?: string
   whyPanelId?: string
   whyExpanded?: boolean
+  /** Body content for the why-these-songs popover. */
   whyPanel?: ReactNode
-  onCopy?: () => void
-  copyLabel?: string
-  copyStatus?: ReactNode
+  /** Optional action shown below the synced player (e.g. Open on YouTube). */
+  secondaryAction?: ReactNode
   accent?: string
   className?: string
   contentClassName?: string
   titleClassName?: string
   whyClassName?: string
-  stageClassName?: string
-  cardClassName?: string
-  cardStyle?: CSSProperties
-  captionClassName?: string
-  captionStyle?: CSSProperties
-  waveGetCy?: () => number
-  waveCy?: number
+  actionsClassName?: string
   children?: ReactNode
+}
+
+type PopoverCoords = {
+  top: number
+  left: number
+  width: number
+  caretLeft: number
+  placement: "below" | "above"
+}
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n))
 }
 
 export default function PlaylistScreen({
   title = "Musical nutrients for the journey forward",
-  song = {},
-  index = 0,
-  count = 0,
-  previewBar,
-  onPrev,
-  onNext,
   onWhy,
   whyButtonId,
   whyPanelId,
   whyExpanded,
   whyPanel,
-  onCopy,
-  copyLabel = "Copy song list",
-  copyStatus,
+  secondaryAction,
   accent = "var(--fill)",
   className,
   contentClassName,
   titleClassName,
   whyClassName,
-  stageClassName,
-  cardClassName,
-  cardStyle,
-  captionClassName,
-  captionStyle,
-  waveGetCy,
-  waveCy = 300,
+  actionsClassName,
   children,
 }: PlaylistScreenProps) {
+  const whyAnchorRef = useRef<HTMLDivElement>(null)
+  const whyButtonRef = useRef<HTMLButtonElement>(null)
+  const whyPopoverRef = useRef<HTMLDivElement>(null)
+  const [popoverCoords, setPopoverCoords] = useState<PopoverCoords | null>(null)
+  const [tipVisible, setTipVisible] = useState(false)
+  const [tipCoords, setTipCoords] = useState<{ top: number; left: number } | null>(null)
+
+  const updateTipPosition = () => {
+    const btn = whyButtonRef.current
+    if (!btn) return
+    const rect = btn.getBoundingClientRect()
+    setTipCoords({
+      top: rect.bottom + 8,
+      left: rect.left + rect.width / 2,
+    })
+  }
+
+  useLayoutEffect(() => {
+    if (!tipVisible || whyExpanded) {
+      setTipCoords(null)
+      return
+    }
+    updateTipPosition()
+    window.addEventListener("resize", updateTipPosition)
+    window.addEventListener("scroll", updateTipPosition, true)
+    return () => {
+      window.removeEventListener("resize", updateTipPosition)
+      window.removeEventListener("scroll", updateTipPosition, true)
+    }
+  }, [tipVisible, whyExpanded])
+
+  useEffect(() => {
+    document.body.classList.toggle("munu-why-overlay-open", Boolean(whyExpanded || tipVisible))
+    return () => document.body.classList.remove("munu-why-overlay-open")
+  }, [whyExpanded, tipVisible])
+
+  useLayoutEffect(() => {
+    if (!whyExpanded) {
+      setPopoverCoords(null)
+      return
+    }
+
+    const update = () => {
+      const btn = whyButtonRef.current
+      const pop = whyPopoverRef.current
+      if (!btn) return
+
+      const gap = 12
+      const margin = 12
+      const rect = btn.getBoundingClientRect()
+      const popWidth = Math.min(352, window.innerWidth - margin * 2)
+      const popHeight = pop?.offsetHeight || 160
+
+      const spaceBelow = window.innerHeight - margin - (rect.bottom + gap)
+      const spaceAbove = rect.top - gap - margin
+      const placement: "below" | "above" =
+        spaceBelow >= Math.min(popHeight, 120) || spaceBelow >= spaceAbove ? "below" : "above"
+
+      let top =
+        placement === "below"
+          ? rect.bottom + gap
+          : Math.max(margin, rect.top - gap - popHeight)
+      if (placement === "below" && top + popHeight > window.innerHeight - margin) {
+        top = Math.max(margin, window.innerHeight - margin - popHeight)
+      }
+
+      let left = rect.left + rect.width / 2 - popWidth / 2
+      left = clamp(left, margin, window.innerWidth - margin - popWidth)
+
+      const caretLeft = clamp(rect.left + rect.width / 2 - left, 16, popWidth - 16)
+
+      setPopoverCoords({ top, left, width: popWidth, caretLeft, placement })
+    }
+
+    update()
+    const raf = window.requestAnimationFrame(update)
+    window.addEventListener("resize", update)
+    window.addEventListener("scroll", update, true)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      window.removeEventListener("resize", update)
+      window.removeEventListener("scroll", update, true)
+    }
+  }, [whyExpanded, whyPanel])
+
+  useEffect(() => {
+    if (!whyExpanded || !onWhy) return
+
+    const onPointerDown = (event: MouseEvent | PointerEvent) => {
+      const target = event.target as Node | null
+      if (target && whyAnchorRef.current?.contains(target)) return
+      if (target && whyPopoverRef.current?.contains(target)) return
+      onWhy()
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onWhy()
+    }
+
+    document.addEventListener("pointerdown", onPointerDown)
+    document.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown)
+      document.removeEventListener("keydown", onKeyDown)
+    }
+  }, [whyExpanded, onWhy])
+
+  const whyTip =
+    tipVisible && !whyExpanded && tipCoords && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            className="arr-player__why-tip"
+            role="tooltip"
+            style={{ top: tipCoords.top, left: tipCoords.left }}
+          >
+            Why these songs?
+          </div>,
+          document.body,
+        )
+      : null
+
+  const whyPopover =
+    whyExpanded && whyPanel && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={whyPopoverRef}
+            id={whyPanelId}
+            role="dialog"
+            aria-labelledby={whyButtonId}
+            className={cn(
+              "arr-player__why-popover",
+              popoverCoords?.placement === "above" && "arr-player__why-popover--above",
+            )}
+            style={
+              popoverCoords
+                ? {
+                    top: popoverCoords.top,
+                    left: popoverCoords.left,
+                    width: popoverCoords.width,
+                    ["--why-caret-left" as string]: `${popoverCoords.caretLeft}px`,
+                  }
+                : { visibility: "hidden" }
+            }
+          >
+            <span className="arr-player__why-caret" aria-hidden />
+            <div className="arr-player__why-popover-body">{whyPanel}</div>
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
     <div
       className={cn("arr-screen arr-screen--playlist", className)}
       style={{ "--accent": accent } as CSSProperties}
     >
       <div className={cn("arr-screen__content arr-player__content", contentClassName)}>
-        <h2 className={cn("arr-player__title", titleClassName)}>{title}</h2>
-
-        {onWhy ? (
-          <div className={cn("arr-player__why-wrap", whyClassName)}>
-            <button
-              type="button"
-              id={whyButtonId}
-              className="arr-player__why"
-              aria-expanded={whyExpanded}
-              aria-controls={whyPanelId}
-              onClick={onWhy}
-            >
-              Why these songs?
-            </button>
-            {whyPanel}
-          </div>
-        ) : null}
-
-        <div className={cn("arr-player__stage", stageClassName)}>
-          <div className="arr-player__stage-wave" aria-hidden>
-            <SoundWave
-              mode="band"
-              color={accent}
-              cy={waveCy}
-              getCy={waveGetCy}
-              swell={0.4}
-            />
-          </div>
-          <button type="button" className="arr-arrow" aria-label="Previous" onClick={onPrev}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="15 18 9 12 15 6" />
-            </svg>
-          </button>
-
-          <div className={cn("arr-card", cardClassName)} style={cardStyle}>
-            {song.art ? (
-              <img
-                className="arr-card__art"
-                src={song.art}
-                alt={song.name ? `${song.name} album art` : "Album art"}
-              />
-            ) : (
-              <div className="arr-card__art arr-card__art--placeholder" aria-hidden />
-            )}
-            {previewBar ? (
-              <div className="arr-card__bar arr-card__bar--preview">{previewBar}</div>
-            ) : null}
-          </div>
-
-          <button type="button" className="arr-arrow" aria-label="Next" onClick={onNext}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="arr-player__meta">
-          <div
-            className={cn("arr-player__caption", captionClassName)}
-            style={captionStyle}
-          >
-            {song.name ? <p className="arr-player__song">{song.name}</p> : null}
-            {song.artist ? <p className="arr-player__artist">by {song.artist}</p> : null}
-            {song.note ? <p className="arr-player__note">{song.note}</p> : null}
-          </div>
-          {count > 0 ? (
-            <div className="arr-player__dots" aria-hidden>
-              {Array.from({ length: count }).map((_, i) => (
-                <span key={i} className={i === index ? "is-on" : ""} />
-              ))}
-            </div>
-          ) : null}
-          {onCopy ? (
-            <div className="arr-player__copy-wrap">
-              <button type="button" className="arr-player__copy" onClick={onCopy}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                </svg>
-                {copyLabel}
+        <div className={cn("arr-player__heading", titleClassName)}>
+          <h2 className="arr-player__title">{title}</h2>
+          {onWhy ? (
+            <div ref={whyAnchorRef} className={cn("arr-player__why-anchor", whyClassName)}>
+              <button
+                ref={whyButtonRef}
+                type="button"
+                id={whyButtonId}
+                className="arr-player__why-info"
+                aria-label="Why these songs?"
+                aria-expanded={whyExpanded}
+                aria-controls={whyPanelId}
+                aria-haspopup="dialog"
+                onMouseEnter={() => {
+                  setTipVisible(true)
+                  updateTipPosition()
+                }}
+                onMouseLeave={() => setTipVisible(false)}
+                onFocus={() => {
+                  setTipVisible(true)
+                  updateTipPosition()
+                }}
+                onBlur={() => setTipVisible(false)}
+                onClick={onWhy}
+              >
+                <Info aria-hidden size={18} strokeWidth={2} />
               </button>
-              {copyStatus}
+              {whyTip}
+              {whyPopover}
             </div>
           ) : null}
         </div>
 
-        {children}
+        <div className="arr-player__body">
+          {children}
+
+          {secondaryAction ? (
+            <div className={cn("arr-player__actions", actionsClassName)}>{secondaryAction}</div>
+          ) : null}
+        </div>
       </div>
     </div>
   )

@@ -37,7 +37,8 @@ export default function FollowAlongBanner({ onExitNavigation }: FollowAlongBanne
   const pill = (
     <div
       className={cn(
-        "pointer-events-none fixed right-3 top-3 z-[9999] flex justify-end sm:right-5 sm:top-5",
+        /* Match FlowBrandHeader: top 1.75rem, mark 64px; right inset = logo left (1.5rem) */
+        "pointer-events-none fixed right-[1.5rem] top-[1.75rem] z-[9999] flex h-16 items-center justify-end",
       )}
       role="status"
       aria-live="polite"
