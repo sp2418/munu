@@ -36,7 +36,7 @@ export default function Welcome({ onGetStarted, onSeeDemo, exiting = false }: We
             "text-[31px] font-medium leading-[1.48] tracking-[-0.005em] text-[var(--ink)]",
           )}
         >
-          <span className="block whitespace-nowrap">Hi there. Welcome to Musical Nutrients,</span>
+          <span className="block whitespace-nowrap">Hi there. Welcome to Musical Nutrients.</span>
           {/* <span className="block">an app that guides you through</span>
           <span className="block">your feelings with music that</span>
           <span className="block">
