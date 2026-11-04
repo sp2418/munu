@@ -1112,7 +1112,7 @@ function Results({
         setClaudeRes(parsed)
         setClaudeInsightError(null)
         if (fingerprint) writeClaudeCache(fingerprint, parsed)
-      } catch {
+      } catch (error) {
         if (attempt < maxAttempts - 1) {
           const wait = claudeBackoffMs(attempt)
           await new Promise((r) => setTimeout(r, wait))
@@ -1212,7 +1212,6 @@ function Results({
         await new Promise(resolve => setTimeout(resolve, 200))
 
         const title = song.title
-        const artist = song.artist
         const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
 
         const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${cleanArtist}&token=${token}`)

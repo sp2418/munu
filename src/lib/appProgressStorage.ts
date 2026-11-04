@@ -68,7 +68,10 @@ export function readInitialAppView(): AppView {
   const fallback = inferViewFromStorage()
   if (typeof sessionStorage === "undefined") return fallback
 
-  const saved = parseJson<AppProgress & { view?: string }>(sessionStorage.getItem(APP_PROGRESS_KEY))
+  // Legacy payloads may still store view: "checkin" — keep view untyped until normalized.
+  const saved = parseJson<Omit<AppProgress, "view"> & { view?: string }>(
+    sessionStorage.getItem(APP_PROGRESS_KEY),
+  )
   // Legacy "checkin" view collapses into the merged onboarding flow.
   const view: AppView | undefined =
     saved?.view === "checkin" ? "onboarding" : (saved?.view as AppView | undefined)
@@ -78,7 +81,9 @@ export function readInitialAppView(): AppView {
 
 export function readAppProgress(): AppProgress | null {
   if (typeof sessionStorage === "undefined") return null
-  const saved = parseJson<AppProgress & { view?: string }>(sessionStorage.getItem(APP_PROGRESS_KEY))
+  const saved = parseJson<Omit<AppProgress, "view"> & { view?: string }>(
+    sessionStorage.getItem(APP_PROGRESS_KEY),
+  )
   if (!saved) return null
   if (saved.view === "checkin") {
     return { ...saved, view: "onboarding" }
