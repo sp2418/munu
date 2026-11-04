@@ -4,5 +4,16 @@
       "source": "/itunes/:path*",
       "destination": "https://itunes.apple.com/:path*"
     }
+  ],
+  "functions": {
+    "api/nightly-cache.ts": {
+      "maxDuration": 300
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/nightly-cache",
+      "schedule": "0 6 * * *"
+    }
   ]
 }
