@@ -1225,19 +1225,24 @@ function Results({
       const normalize = (str: string) =>
         str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
+      // If Spotify can't answer, a playlist of unchecked songs beats no playlist.
+      const keepUnverified = (song: any) => ({ ...song, imageUrl: null, durationMs: null })
+
       const token = await getSpotifyAccessToken()
-      if (!token) return verifiedSongs
-      for (const song of songs) {
+      if (!token) return songs.map(keepUnverified)
+      for (const [index, song] of songs.entries()) {
         await new Promise(resolve => setTimeout(resolve, 200))
 
         const title = song.title
         const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
 
-        const response = await fetch(`/api/spotify-search?q=${title}&type=track&artist=${cleanArtist}&token=${token}`)
+        const response = await fetch(
+          `/api/spotify-search?q=${encodeURIComponent(title)}&type=track&artist=${encodeURIComponent(cleanArtist)}&token=${encodeURIComponent(token)}`,
+        ).catch(() => null)
 
-        if (response.status === 429){
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          continue
+        // Stop asking, so a struggling Spotify isn't pushed any harder.
+        if (!response?.ok) {
+          return [...verifiedSongs, ...songs.slice(index).map(keepUnverified)]
         }
 
         const result = await response.json()

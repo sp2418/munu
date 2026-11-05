@@ -1,18 +1,19 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node"
-import { deleteOldUsageCounts } from "./_limits.js"
+import { consumeNightlySearch, deleteOldUsageCounts } from "./_limits.js"
 import {
   cacheKey,
   cacheVideoId,
   getCachedVideoId,
   getSupabase,
   searchYoutube,
+  videoMatchesSong,
 } from "./_youtube.js"
 
 /**
  * Runs once a night, just before YouTube's daily reset at midnight Pacific.
  *
  * 1. Rechecks saved videos before they reach YouTube's 30-day storage limit.
- * 2. Spends whatever searches are left today on the song to-do list.
+ * 2. Spends spare searches on the song to-do list, always leaving some for people.
  *
  * `?dryRun=1` reports what would happen without changing anything or using searches.
  */
@@ -21,7 +22,9 @@ import {
 const RECHECK_AFTER_DAYS = 25
 const VIDEOS_PER_CHECK = 50
 const MAX_RECHECKS_PER_NIGHT = 5000
-const MAX_SEARCHES_PER_NIGHT = 100
+const SONGS_READ_PER_NIGHT = 200
+/** Repeated failures mean something is wrong, so stop instead of trying everything. */
+const MAX_FAILURES_IN_A_ROW = 3
 /** Leave time to finish cleanly before the function's 300-second limit. */
 const TIME_BUDGET_MS = 240_000
 
@@ -61,16 +64,21 @@ async function recheckSavedVideos(dryRun: boolean) {
   let stillThere = 0
   let removed = 0
   let failedBatches = 0
+  let failuresInARow = 0
 
   for (let i = 0; i < rows.length; i += VIDEOS_PER_CHECK) {
+    if (failuresInARow >= MAX_FAILURES_IN_A_ROW) break
+
     const batch = rows.slice(i, i + VIDEOS_PER_CHECK)
     const existing = await findExistingVideoIds(batch.map((row) => row.video_id))
 
     // A failed check says nothing about the videos, so never delete on one.
     if (!existing) {
       failedBatches += 1
+      failuresInARow += 1
       continue
     }
+    failuresInARow = 0
 
     const live = batch.filter((row) => existing.has(row.video_id))
     const gone = batch.filter((row) => !existing.has(row.video_id))
@@ -114,7 +122,7 @@ async function growSavedSongs(dryRun: boolean, startedAt: number) {
     .order("source_rank", { ascending: true })
     .order("rotation", { ascending: true })
     .order("genre", { ascending: true })
-    .limit(MAX_SEARCHES_PER_NIGHT * 2)
+    .limit(SONGS_READ_PER_NIGHT)
 
   if (error) throw new Error(`Couldn't read the song to-do list: ${error.message}`)
 
@@ -126,9 +134,12 @@ async function growSavedSongs(dryRun: boolean, startedAt: number) {
   let notFound = 0
   let searches = 0
   let ranOutOfSearches = false
+  let leftSearchesForPeople = false
+  let failuresInARow = 0
 
   for (const row of queue) {
-    if (searches >= MAX_SEARCHES_PER_NIGHT || Date.now() - startedAt > TIME_BUDGET_MS) break
+    if (failuresInARow >= MAX_FAILURES_IN_A_ROW) break
+    if (Date.now() - startedAt > TIME_BUDGET_MS) break
 
     const song = { title: row.title, artist: row.artist }
     const key = cacheKey(song)
@@ -138,15 +149,24 @@ async function growSavedSongs(dryRun: boolean, startedAt: number) {
       continue
     }
 
-    const { videoId, quotaExceeded, failed } = await searchYoutube(song)
+    if (!(await consumeNightlySearch())) {
+      leftSearchesForPeople = true
+      break
+    }
+
+    const { videoId, videoDetails, quotaExceeded, failed } = await searchYoutube(song)
     if (quotaExceeded) {
       ranOutOfSearches = true
       break
     }
     searches += 1
     // Leave the song on the list to try again another night.
-    if (failed) continue
-    if (videoId) {
+    if (failed) {
+      failuresInARow += 1
+      continue
+    }
+    failuresInARow = 0
+    if (videoId && videoMatchesSong(videoDetails, song)) {
       await cacheVideoId(key, videoId)
       await markQueued(row.cache_key, "done")
       added += 1
@@ -156,7 +176,16 @@ async function growSavedSongs(dryRun: boolean, startedAt: number) {
     }
   }
 
-  return { waiting: queue.length, added, alreadySaved, notFound, searches, ranOutOfSearches }
+  return {
+    waiting: queue.length,
+    added,
+    alreadySaved,
+    notFound,
+    searches,
+    ranOutOfSearches,
+    leftSearchesForPeople,
+    failuresInARow,
+  }
 }
 
 export default async function handleNightlyCache(req: VercelRequest, res: VercelResponse) {

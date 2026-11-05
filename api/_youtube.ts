@@ -37,6 +37,8 @@ type YtErrorBody = {
 
 export type SearchResult = {
   videoId: string | null
+  /** The video's title and channel, for checking it's really this song. */
+  videoDetails: string
   /** True when YouTube refused because today's allowance has run out. */
   quotaExceeded: boolean
   /** True when the search itself failed, so "no video" can't be trusted. */
@@ -53,6 +55,22 @@ function normalize(s: string): string {
 
 export function cacheKey(song: SongRef): string {
   return `${normalize(song.artist)}|${normalize(song.title)}`
+}
+
+function compact(s: string): string {
+  const decoded = s
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+  return normalize(decoded).replace(/\s/g, "")
+}
+
+/** YouTube answers a made-up song with its closest match, so check the result names it. */
+export function videoMatchesSong(videoDetails: string, song: SongRef): boolean {
+  const details = compact(videoDetails)
+  return details.includes(compact(song.title)) && details.includes(compact(song.artist))
 }
 
 export async function getCachedVideoId(key: string): Promise<string | null> {
@@ -103,12 +121,15 @@ export async function searchYoutube(song: SongRef): Promise<SearchResult> {
     console.warn("[youtube-search] search failed:", body.error?.message ?? ytRes.status)
     return {
       videoId: null,
+      videoDetails: "",
       quotaExceeded: ytRes.status === 403 && /quota|limit/i.test(reasons),
       failed: true,
     }
   }
+  const item = data.items?.[0] as YtSearchItem | undefined
   return {
-    videoId: (data.items?.[0] as YtSearchItem | undefined)?.id?.videoId ?? null,
+    videoId: item?.id?.videoId ?? null,
+    videoDetails: `${item?.snippet?.title ?? ""} ${item?.snippet?.channelTitle ?? ""}`,
     quotaExceeded: false,
     failed: false,
   }

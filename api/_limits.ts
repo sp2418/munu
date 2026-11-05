@@ -10,6 +10,13 @@ const PLAYLISTS_PER_DAY = 50
 /** A full playlist of new songs is 10 searches. */
 const SEARCHES_PER_DEVICE = PLAYLISTS_PER_DEVICE * 10
 const SEARCHES_PER_CONNECTION = 40
+/** YouTube's daily allowance of searches. */
+const SEARCHES_PER_DAY = 100
+/** Two full playlists of new songs, which the nightly job must always leave for people. */
+const SEARCHES_KEPT_FOR_PEOPLE = 20
+const APP_SEARCHES = "search-app"
+/** People are only stopped by YouTube itself, so this bucket just keeps count for them. */
+const NEVER_FULL = 1_000_000
 
 const DEVICE_COOKIE = "munu_device"
 const OWNER_COOKIE = "munu_owner"
@@ -142,16 +149,38 @@ export async function consumePlaylist(
 
 /** Whether this person may spend one of today's YouTube searches. */
 export async function consumeSearch(req: VercelRequest, res: VercelResponse): Promise<boolean> {
-  if (isOwner(req)) return true
-
   const day = today()
+
+  if (isOwner(req)) {
+    await consume(day, [APP_SEARCHES], [NEVER_FULL])
+    return true
+  }
+
   const { device, connection } = buckets(req, res, day)
   const full = await consume(
     day,
-    [`search-device:${device}`, `search-connection:${connection}`],
-    [SEARCHES_PER_DEVICE, SEARCHES_PER_CONNECTION],
+    [`search-device:${device}`, `search-connection:${connection}`, APP_SEARCHES],
+    [SEARCHES_PER_DEVICE, SEARCHES_PER_CONNECTION, NEVER_FULL],
   )
   return full === null
+}
+
+/**
+ * Whether the nightly job may spend a search, leaving enough for people. Unlike the
+ * checks above, this says no if counting breaks, because people come first.
+ */
+export async function consumeNightlySearch(): Promise<boolean> {
+  const { data, error } = await getSupabase().rpc("consume_allowance", {
+    p_day: today(),
+    p_buckets: [APP_SEARCHES],
+    p_limits: [SEARCHES_PER_DAY - SEARCHES_KEPT_FOR_PEOPLE],
+  })
+
+  if (error) {
+    console.error("[limits] nightly count failed:", error.message)
+    return false
+  }
+  return data === null
 }
 
 /** Counts are only needed for the current day. */

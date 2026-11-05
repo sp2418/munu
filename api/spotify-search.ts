@@ -16,7 +16,8 @@ export default async function handleSpotifySearch(req: VercelRequest, res: Verce
         })
         // console.log(response.status)
         const data = await searchResponse.json()
-        res.status(200).json(data)
+        // Pass Spotify's real status along, so a block isn't mistaken for "song not found".
+        res.status(searchResponse.status).json(data)
         return data
     }
     catch (error: any) {

@@ -1,5 +1,6 @@
 -- Run once in the Supabase SQL editor.
--- The to-do list of songs the nightly job looks up with leftover YouTube searches.
+-- The to-do list of songs the nightly job looks up with spare YouTube searches.
+-- The weekly job (api/weekly-song-list.ts) refills it.
 
 create table if not exists public.song_seed_queue (
   cache_key text primary key,
