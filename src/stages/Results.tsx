@@ -1005,6 +1005,8 @@ function Results({
   useEffect(() => {
     if (resumeFullSnapshotRef.current) return
     if (!revealPlaylistFooter || !playlistRevealAllowed || !claudeRes) return
+    // Stacked layout: the footer is far below the player, so this would scroll past it.
+    if (window.matchMedia("(max-width: 767px)").matches) return
 
     const rafRef = { current: 0 }
     // Wait a frame so the footer is laid out before measuring.

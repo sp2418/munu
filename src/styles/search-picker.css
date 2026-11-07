@@ -232,3 +232,25 @@
     transform: none;
   }
 }
+
+@media (max-width: 640px) {
+  .munu-picks-scroll,
+  .munu-question-stage--search-picker .munu-picks-scroll {
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    padding-inline: 0;
+    scrollbar-gutter: auto;
+  }
+
+  .munu-search-dropdown {
+    max-height: min(360px, 40svh);
+  }
+
+  .munu-pick-card__remove {
+    top: 6px;
+    right: 6px;
+    height: 36px;
+    width: 36px;
+  }
+}

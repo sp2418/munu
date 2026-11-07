@@ -129,3 +129,15 @@
 @media (prefers-reduced-motion: reduce) {
   .intro-screen__next:hover { transform: none; filter: none; }
 }
+
+@media (max-width: 640px) {
+  .intro-screen__title {
+    font-size: 28px;
+  }
+  .intro-screen__title--soft {
+    font-size: 26px;
+  }
+  .intro-screen__sub {
+    font-size: 17px;
+  }
+}

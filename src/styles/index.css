@@ -179,3 +179,10 @@
     @apply font-sans;
   }
 }
+
+/* Phones: the floor wave's horizon sits too high to spare that much height. */
+@media (max-width: 640px) {
+  :root {
+    --munu-floor-cta-bottom: calc(3svh + 1rem);
+  }
+}

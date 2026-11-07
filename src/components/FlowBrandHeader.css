@@ -128,3 +128,35 @@
     animation: none;
   }
 }
+
+/*
+ * Phones: fit screens stay viewport-locked, but their content can be taller
+ * than the gap between the brand and the fixed CTAs, so it scrolls in place
+ * and fades out before reaching either. `safe center` keeps the top reachable.
+ */
+@media (max-width: 640px) {
+  .munu-flow-shell--fit .munu-question-stage__body,
+  .munu-flow-shell--fit .story-screen__content,
+  .munu-flow-shell--fit .intro-screen__content {
+    justify-content: safe center;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-inline: 24px;
+    padding-top: calc(var(--munu-flow-brand-height, 6.6rem) + 0.5rem);
+    padding-bottom: calc(var(--munu-floor-cta-bottom, 2.5rem) + 5rem);
+    -webkit-mask-image: var(--munu-fit-scroll-mask);
+    mask-image: var(--munu-fit-scroll-mask);
+    --munu-fit-scroll-mask: linear-gradient(
+      to bottom,
+      transparent calc(var(--munu-flow-brand-height, 6.6rem) - 1rem),
+      #000 var(--munu-flow-brand-height, 6.6rem),
+      #000 calc(100% - var(--munu-floor-cta-bottom, 2.5rem) - 4.75rem),
+      transparent calc(100% - var(--munu-floor-cta-bottom, 2.5rem) - 3.5rem)
+    );
+  }
+
+  /* One scroller: the page-level body, not a nested picks list. */
+  .munu-flow-shell--fit .munu-question-stage--search-picker .munu-question-stage__body {
+    display: block;
+  }
+}

@@ -123,3 +123,16 @@
 @media (prefers-reduced-motion: reduce) {
   .story-screen__next:hover { transform: none; filter: none; }
 }
+
+@media (max-width: 640px) {
+  .story-screen__art {
+    width: 140px;
+    height: 140px;
+    flex: none;
+    margin-bottom: 20px;
+  }
+  .story-screen__body {
+    font-size: 18px;
+    line-height: 1.6;
+  }
+}

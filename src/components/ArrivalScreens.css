@@ -1579,3 +1579,106 @@ body.munu-why-overlay-open .arr-youtube iframe {
     filter: none;
   }
 }
+
+/* ═══ Phones ═════════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .arr-screen {
+    min-height: 100svh;
+  }
+  .arr-screen--load .arr-screen__content {
+    padding-inline: 24px;
+  }
+  .arr-load__title {
+    font-size: 26px;
+  }
+
+  /* Insight pre-reveal: too long to center, so the title joins the flow and
+     the text scrolls in place. Scroll lives on the inner block because the
+     mirror also holds the fixed CTA, which a mask there would clip. */
+  .arr-insight-playlist:not(.arr-insight-playlist--revealed)
+    .arr-insight-playlist__mirror {
+    padding: 0.5rem 24px calc(var(--munu-floor-cta-bottom, 2.5rem) + 4rem);
+  }
+  .arr-insight-playlist:not(.arr-insight-playlist--revealed)
+    .arr-insight-playlist__mirror
+    .arr-insight__inner {
+    display: block;
+    min-height: 0;
+    max-height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 1.5rem;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 1.5rem), transparent);
+  }
+  .arr-insight-playlist--walkthrough:not(.arr-insight-playlist--revealed)
+    .arr-insight-playlist__mirror {
+    padding-top: 0.5rem;
+  }
+  .arr-insight-playlist:not(.arr-insight-playlist--revealed)
+    .arr-insight-playlist__mirror
+    .arr-insight__title {
+    position: static;
+    transform: none;
+    width: auto;
+    margin-bottom: 1rem;
+  }
+  .arr-insight__body {
+    font-size: 17px;
+    line-height: 1.6;
+  }
+
+  /* Reveal scrolls to this section's top, so clear the sticky brand there. */
+  .arr-insight-playlist__playlist .arr-screen__content {
+    padding: calc(var(--munu-flow-brand-height, 6.6rem) + 0.5rem) 24px 2.5rem;
+  }
+
+  /* Player: card takes the full width, arrows ride on the artwork. */
+  .arr-player__stage,
+  .arr-results-split .arr-player__stage {
+    justify-content: center;
+    gap: 0;
+    min-height: 0;
+    width: 100%;
+  }
+  .arr-card,
+  .arr-results-split .arr-card {
+    width: min(330px, 100%);
+  }
+  .arr-card__art {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+  .arr-player__stage > .arr-arrow {
+    position: absolute;
+    top: 40%;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.82);
+    transform: translateY(-50%);
+  }
+  .arr-player__stage > .arr-arrow:first-child {
+    left: 8px;
+  }
+  .arr-player__stage > .arr-arrow:last-child {
+    right: 8px;
+  }
+  .arr-player__stage > .arr-arrow:hover {
+    transform: translateY(-50%);
+  }
+
+  /* The page already scrolls; a nested list just traps the thumb. */
+  .arr-playlist-sync__rows {
+    max-height: none;
+    overflow: visible;
+  }
+  .arr-playlist-sync__action {
+    height: 2.5rem;
+    padding-inline: 0.9rem;
+    font-size: 0.875rem;
+  }
+  .arr-player__why-info {
+    width: 40px;
+    height: 40px;
+  }
+}
