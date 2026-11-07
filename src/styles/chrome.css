@@ -210,3 +210,19 @@
     padding-inline: 24px;
   }
 }
+
+@media (max-width: 640px) {
+  .munu-question-stage__progress {
+    right: 1.5rem;
+  }
+
+  /* Shares the top-right corner with the walkthrough pill and peeks out from behind it. */
+  body:has(.munu-follow-along-pill) .munu-question-stage__progress {
+    visibility: hidden;
+  }
+
+  [data-slot="textarea"].munu-field {
+    min-height: 260px;
+    padding: 18px 20px;
+  }
+}

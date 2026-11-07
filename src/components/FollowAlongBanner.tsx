@@ -38,7 +38,7 @@ export default function FollowAlongBanner({ onExitNavigation }: FollowAlongBanne
     <div
       className={cn(
         /* Match FlowBrandHeader: top 1.75rem, mark 64px; right inset = logo left (1.5rem) */
-        "pointer-events-none fixed right-[1.5rem] top-[1.75rem] z-[9999] flex h-16 items-center justify-end",
+        "munu-follow-along-pill pointer-events-none fixed right-[1.5rem] top-[1.75rem] z-[9999] flex h-16 items-center justify-end",
       )}
       role="status"
       aria-live="polite"
@@ -62,14 +62,14 @@ export default function FollowAlongBanner({ onExitNavigation }: FollowAlongBanne
           height={28}
           className="size-7 shrink-0 rounded-full object-cover ring-1 ring-[var(--border)]/50"
         />
-        <span className="min-w-0 flex-1 text-left text-[0.8125rem] leading-snug text-[var(--text-h)] sm:text-sm">
+        <span className="min-w-0 flex-1 text-left text-[0.8125rem] leading-snug text-[var(--text-h)] max-[374px]:sr-only sm:text-sm">
           ViVi&apos;s walkthrough
         </span>
         <button
           type="button"
           onClick={handleExit}
           className={cn(
-            "shrink-0 text-[0.75rem] font-medium text-[var(--text)] underline-offset-2 transition-colors",
+            "-mx-1.5 -my-2 shrink-0 px-1.5 py-2 text-[0.75rem] font-medium text-[var(--text)] underline-offset-2 transition-colors",
             "hover:text-[var(--text-h)] hover:underline",
             "focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]",
           )}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from "react"
+import type { CSSProperties, ReactNode } from "react"
 import { cn } from "../lib/utils"
 import YoutubePlaylistPlayer from "./YoutubePlaylistPlayer"
 import PreviewCarousel from "./PreviewCarousel"
@@ -48,19 +48,8 @@ export default function PlaylistSyncedLayout({
   previewCaptionClassName,
   previewCaptionStyle,
 }: PlaylistSyncedLayoutProps) {
-  const rowRefs = useRef<Array<HTMLButtonElement | null>>([])
   const safeIndex = Math.min(Math.max(0, activeIndex), Math.max(0, tracks.length - 1))
   const youtubeMode = mode === "youtube"
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    const narrow = window.matchMedia("(max-width: 767px)").matches
-    if (!narrow) return
-    rowRefs.current[safeIndex]?.scrollIntoView({
-      block: "nearest",
-      behavior: "smooth",
-    })
-  }, [safeIndex])
 
   return (
     <div className={cn("arr-playlist-sync", className)}>
@@ -105,9 +94,6 @@ export default function PlaylistSyncedLayout({
                 <li key={`sync-row-${i}-${title}-${artist}`} className="arr-playlist-sync__row-wrap">
                   <button
                     type="button"
-                    ref={(el) => {
-                      rowRefs.current[i] = el
-                    }}
                     className={cn(
                       "arr-playlist-sync__row",
                       isActive && "is-active",

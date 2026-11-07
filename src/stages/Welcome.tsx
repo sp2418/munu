@@ -33,10 +33,10 @@ export default function Welcome({ onGetStarted, onSeeDemo, exiting = false }: We
         <p
           className={cn(
             "m-0 max-w-none font-serif",
-            "text-[31px] font-medium leading-[1.48] tracking-[-0.005em] text-[var(--ink)]",
+            "text-[26px] font-medium leading-[1.35] tracking-[-0.005em] text-balance text-[var(--ink)] sm:text-[31px] sm:leading-[1.48]",
           )}
         >
-          <span className="block whitespace-nowrap">Hi there. Welcome to Musical Nutrients.</span>
+          <span className="block sm:whitespace-nowrap">Hi there. Welcome to Musical Nutrients.</span>
           {/* <span className="block">an app that guides you through</span>
           <span className="block">your feelings with music that</span>
           <span className="block">
@@ -48,7 +48,7 @@ export default function Welcome({ onGetStarted, onSeeDemo, exiting = false }: We
 
         <p
           className={cn(
-            "mt-[42px] m-0 max-w-[430px] text-pretty",
+            "m-0 mt-5 max-w-[430px] text-pretty sm:mt-0",
             "font-ui text-[17px] leading-[1.66] text-[var(--ink-muted)]",
           )}
         >
