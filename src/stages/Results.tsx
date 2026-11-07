@@ -38,6 +38,13 @@ import {
 } from "../lib/viviWalkthroughStorage"
 import { saveYoutubePlaylistToHistory } from "../lib/youtubePlaylistStorage"
 
+/** Lets an empty playlist show up in the server logs. */
+function reportEmptyPlaylist(reason: "no-matches" | "error"): void {
+  void fetch(`/api/playlist-issue?reason=${reason}`, { method: "POST", keepalive: true }).catch(
+    () => {},
+  )
+}
+
 const INSIGHT_LOADING_LINES = [
   "Listening to where you are...",
   "Reading the music you've been reaching for...",
@@ -492,6 +499,7 @@ function Results({
   const [journeySongsLoading, setJourneySongsLoading] = useState(() =>
     playWalkthroughDemo ? true : mountSnapshot.journeySongsLoading,
   )
+  const [journeySongsFailed, setJourneySongsFailed] = useState(false)
   const [youtubePlaylistUrl, setYoutubePlaylistUrl] = useState<string | null>(null)
   const [youtubeVideoIds, setYoutubeVideoIds] = useState<string[]>([])
   /** Parallel to journeySongs — null when that row has no YouTube match. */
@@ -1230,43 +1238,47 @@ function Results({
       // If Spotify can't answer, a playlist of unchecked songs beats no playlist.
       const keepUnverified = (song: any) => ({ ...song, imageUrl: null, durationMs: null })
 
-      const token = await getSpotifyAccessToken()
+      const token = await getSpotifyAccessToken().catch(() => null)
       if (!token) return songs.map(keepUnverified)
       for (const [index, song] of songs.entries()) {
-        await new Promise(resolve => setTimeout(resolve, 200))
+        try {
+          await new Promise(resolve => setTimeout(resolve, 200))
 
-        const title = song.title
-        const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
+          const title = song.title
+          const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
 
-        const response = await fetch(
-          `/api/spotify-search?q=${encodeURIComponent(title)}&type=track&artist=${encodeURIComponent(cleanArtist)}&token=${encodeURIComponent(token)}`,
-        ).catch(() => null)
+          const response = await fetch(
+            `/api/spotify-search?q=${encodeURIComponent(title)}&type=track&artist=${encodeURIComponent(cleanArtist)}&token=${encodeURIComponent(token)}`,
+          ).catch(() => null)
 
-        // Stop asking, so a struggling Spotify isn't pushed any harder.
-        if (!response?.ok) {
+          // Stop asking, so a struggling Spotify isn't pushed any harder.
+          if (!response?.ok) {
+            return [...verifiedSongs, ...songs.slice(index).map(keepUnverified)]
+          }
+
+          const result = await response.json()
+          const items = result.tracks?.items
+
+          if (!items || items.length === 0) {
+            continue
+          }
+
+          const returnedTrack = items[0]
+          const trackMatches = returnedTrack.name && normalize(returnedTrack.name).includes(normalize(title))
+          const artistMatches = returnedTrack.artists.some((a: { name: string }) =>
+            normalize(a.name).includes(normalize(cleanArtist))
+          )
+
+          if (trackMatches && artistMatches) {
+            const imageUrl = returnedTrack.album?.images?.[0]?.url ?? null
+            const durationMs =
+              typeof returnedTrack.duration_ms === "number" && returnedTrack.duration_ms > 0
+                ? returnedTrack.duration_ms
+                : null
+            verifiedSongs.push({ ...song, imageUrl, durationMs })
+          }
+        } catch {
           return [...verifiedSongs, ...songs.slice(index).map(keepUnverified)]
-        }
-
-        const result = await response.json()
-        const items = result.tracks?.items
-
-        if (!items || items.length === 0) {
-          continue
-        }
-
-        const returnedTrack = items[0]
-        const trackMatches = returnedTrack.name && normalize(returnedTrack.name).includes(normalize(title))
-        const artistMatches = returnedTrack.artists.some((a: { name: string }) =>
-          normalize(a.name).includes(normalize(cleanArtist))
-        )
-
-        if (trackMatches && artistMatches) {
-          const imageUrl = returnedTrack.album?.images?.[0]?.url ?? null
-          const durationMs =
-            typeof returnedTrack.duration_ms === "number" && returnedTrack.duration_ms > 0
-              ? returnedTrack.duration_ms
-              : null
-          verifiedSongs.push({ ...song, imageUrl, durationMs })
         }
       }
       return verifiedSongs
@@ -1274,13 +1286,19 @@ function Results({
 
     const run = async () => {
       let journeyWithPreviews: any[] = []
+      setJourneySongsFailed(false)
       try {
         const verifyJourneySongs = await verifySongs(claudeRes.journeySongs ?? [])
         if (cancelled) return
         journeyWithPreviews = await handleSongPreview(verifyJourneySongs)
         if (cancelled) return
         setJourneySongs(journeyWithPreviews)
+        if (journeyWithPreviews.length === 0) reportEmptyPlaylist("no-matches")
         writeResultsCacheWithCurrentStorage(claudeRes, journeyWithPreviews)
+      } catch (error) {
+        console.error("Couldn't build the playlist:", error)
+        reportEmptyPlaylist("error")
+        if (!cancelled) setJourneySongsFailed(true)
       } finally {
         if (!cancelled) setJourneySongsLoading(false)
       }
@@ -1378,18 +1396,22 @@ function Results({
 
   const handleSongPreview = async (songs: any[]) => {
     const songsWithPreviews: any[] = []
-    for (const song of songs){
-      const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
-      const response = await fetch(
-        `/itunes/search?term=${song.title}+${cleanArtist}&media=music&entity=song&limit=1`
-      )
-      const data = await response.json()
-      const result = data.results[0]
+    for (const song of songs) {
+      // A preview is an extra, so a failed lookup only costs this song its preview.
+      try {
+        const cleanArtist = song.artist.split(/\s+(ft\.|feat\.|&|and\s).*$/i)[0].trim()
+        const response = await fetch(
+          `/api/itunes-search?term=${encodeURIComponent(`${song.title} ${cleanArtist}`)}`,
+        )
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+        const result = data.results?.[0]
 
-      if (!result) {
-        songsWithPreviews.push({ ...song, previewUrl: null })
-      }
-      else{
+        if (!result) {
+          songsWithPreviews.push({ ...song, previewUrl: null })
+          continue
+        }
+
         const normalize = (str: string) =>
           str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
@@ -1408,8 +1430,9 @@ function Results({
             : itunesDuration
 
         songsWithPreviews.push({ ...song, previewUrl, durationMs })
+      } catch {
+        songsWithPreviews.push({ ...song, previewUrl: null })
       }
-
     }
     return songsWithPreviews
   }
@@ -1625,7 +1648,11 @@ function Results({
                     />
                   </PlaylistScreen>
                 ) : playlistRevealAllowed ? (
-                  <p className="arr-player__note px-6 py-10 text-center">No songs matched for this journey.</p>
+                  <p className="arr-player__note px-6 py-10 text-center">
+                    {journeySongsFailed
+                      ? "We couldn't load your songs. Please refresh the page to try again."
+                      : "No songs matched for this journey."}
+                  </p>
                 ) : null}
               </section>
               {revealPlaylistFooter ? (
