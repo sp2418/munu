@@ -14,7 +14,7 @@ A four-question check-in captures what is on your mind, what you have been liste
 
 The React app is a two-stage flow: onboarding, then results. Progress and answers are kept in `localStorage`. Onboarding walks through welcome and prep screens, then four questions (mind, recent tracks via Spotify search, genres, desired feeling). Choosing the Vivi demo prefills that path and uses baked results instead of a live model call.
 
-On results, recent Spotify track IDs are enriched through `/api/reccobeats`. `/api/claude` sends genres, the check-in text, recent tracks with audio features, and the desired feeling to Anthropic, and asks for JSON: an insight, an ISO explanation, and ten `journeySongs`. Each suggested track is verified against the Spotify catalog; non-matches are dropped. Surviving tracks get 30-second preview URLs from the iTunes Search API (proxied as `/itunes`), then video IDs from `/api/youtube-search`, which caches lookups in Supabase. When YouTube resolution succeeds, playback uses the embedded player in order; otherwise the UI falls back to the preview carousel.
+On results, recent Spotify track IDs are enriched through `/api/reccobeats`. `/api/claude` sends genres, the check-in text, recent tracks with audio features, and the desired feeling to Anthropic, and asks for JSON: an insight, an ISO explanation, and ten `journeySongs`. Each suggested track is verified against the Spotify catalog; non-matches are dropped. Surviving tracks get 30-second preview URLs from the iTunes Search API (through `/api/itunes-search`), then video IDs from `/api/youtube-search`, which caches lookups in Supabase. When YouTube resolution succeeds, playback uses the embedded player in order; otherwise the UI falls back to the preview carousel.
 
 ## Tech stack
 
